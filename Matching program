@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>로테이션 소개팅 · 투표</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #171B26;
+    --card: #1F2433;
+    --card-2: #262C3E;
+    --accent: #E8748A;
+    --accent-deep: #C65170;
+    --gold: #D9B98C;
+    --male: #7FA6D9;
+    --text: #F3EDE7;
+    --text-dim: #A9AFC0;
+    --border: rgba(243,237,231,0.12);
+    --danger: #E8748A;
+  }
+  * { box-sizing: border-box; }
+  body{
+    margin:0;
+    min-height:100vh;
+    background: radial-gradient(circle at 20% -10%, #232A3D 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Noto Sans KR', -apple-system, sans-serif;
+    display:flex;
+    justify-content:center;
+    padding: 32px 16px 60px;
+  }
+  .app{ width:100%; max-width:460px; }
+  header{ text-align:center; margin-bottom:28px; }
+  .logo{ font-size:28px; margin-bottom:6px; }
+  h1{
+    font-family:'Noto Serif KR', serif;
+    font-weight:700;
+    font-size:26px;
+    margin:0 0 6px;
+    letter-spacing:-0.01em;
+  }
+  .subtitle{
+    color: var(--text-dim);
+    font-size:14px;
+    margin:0;
+  }
+  .rule{
+    width:56px; height:2px;
+    background: linear-gradient(90deg, var(--gold), var(--accent));
+    margin:14px auto 0;
+    border-radius:2px;
+  }
+
+  .tabs{
+    display:flex;
+    background: var(--card);
+    border-radius:12px;
+    padding:4px;
+    margin-bottom:20px;
+    border:1px solid var(--border);
+  }
+  .tab{
+    flex:1;
+    padding:10px 0;
+    text-align:center;
+    background:transparent;
+    border:none;
+    color: var(--text-dim);
+    font-family:'Noto Sans KR', sans-serif;
+    font-size:14px;
+    font-weight:500;
+    border-radius:8px;
+    cursor:pointer;
+    transition: background .15s ease, color .15s ease;
+  }
+  .tab.active{
+    background: var(--accent);
+    color:#20131A;
+    font-weight:700;
+  }
+
+  .card{
+    background: var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    padding:22px;
+    margin-bottom:14px;
+  }
+
+  label{ display:block; font-size:13px; color:var(--text-dim); margin-bottom:6px; }
+  input[type=password], select{
+    width:100%;
+    padding:12px 14px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background: var(--card-2);
+    color: var(--text);
+    font-size:15px;
+    font-family:'Noto Sans KR', sans-serif;
+    margin-bottom:14px;
+    appearance:none;
+    -webkit-appearance:none;
+  }
+  select{
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='9'><path d='M1 1l6 6 6-6' stroke='%23A9AFC0' stroke-width='2' fill='none' fill-rule='evenodd'/></svg>");
+    background-repeat:no-repeat;
+    background-position: right 14px center;
+    padding-right:36px;
+  }
+  input:focus, select:focus{
+    outline:none;
+    border-color: var(--accent);
+  }
+
+  button.primary{
+    width:100%;
+    padding:13px 0;
+    border-radius:10px;
+    border:none;
+    background: linear-gradient(90deg, var(--accent-deep), var(--accent));
+    color:#20131A;
+    font-size:15px;
+    font-weight:700;
+    font-family:'Noto Sans KR', sans-serif;
+    cursor:pointer;
+    transition: transform .1s ease, opacity .15s ease;
+  }
+  button.primary:active{ transform: scale(0.98); }
+  button.primary:disabled{ opacity:.4; cursor:not-allowed; }
+
+  button.ghost{
+    width:100%;
+    padding:12px 0;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:transparent;
+    color: var(--text-dim);
+    font-size:14px;
+    font-family:'Noto Sans KR', sans-serif;
+    cursor:pointer;
+    margin-top:8px;
+  }
+  button.danger{
+    border-color: rgba(232,116,138,0.4);
+    color: var(--danger);
+  }
+
+  .msg{
+    padding:12px 14px;
+    border-radius:10px;
+    font-size:13.5px;
+    margin-bottom:14px;
+    line-height:1.5;
+  }
+  .msg.error{ background: rgba(232,116,138,0.14); color:#F3AEBB; }
+  .msg.success{ background: rgba(126,199,158,0.14); color:#9BDCB5; }
+  .msg.warn{ background: rgba(217,185,140,0.16); color: var(--gold); }
+
+  .badge{
+    display:inline-block;
+    padding:3px 10px;
+    border-radius:999px;
+    font-size:12.5px;
+    font-weight:700;
+    background: rgba(232,116,138,0.16);
+    color: var(--accent);
+    margin-bottom:14px;
+  }
+
+  .grid12{
+    display:grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap:8px;
+    margin: 14px 0 4px;
+  }
+  .dot{
+    aspect-ratio:1;
+    border-radius:10px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:13px;
+    font-weight:700;
+    border:1px solid var(--border);
+    color: var(--text-dim);
+    background: var(--card-2);
+  }
+  .dot.male{ border-color: rgba(127,166,217,0.35); }
+  .dot.female{ border-color: rgba(232,116,138,0.35); }
+  .dot.voted.male{ background: rgba(127,166,217,0.25); color:#DCE8FA; }
+  .dot.voted.female{ background: rgba(232,116,138,0.22); color:#FBDDE4; }
+
+  .stat-row{ display:flex; gap:10px; margin-bottom:14px; }
+  .stat{
+    flex:1;
+    background: var(--card-2);
+    border-radius:12px;
+    padding:12px 14px;
+    text-align:center;
+  }
+  .stat .num{ font-family:'Noto Serif KR', serif; font-size:22px; font-weight:700; }
+  .stat .cap{ font-size:12px; color:var(--text-dim); margin-top:2px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; margin-top:6px; }
+  th, td{ text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
+  th{ color:var(--text-dim); font-weight:500; font-size:12.5px; }
+  .pill{
+    display:inline-block; padding:2px 8px; border-radius:999px;
+    font-size:11.5px; font-weight:700;
+  }
+  .pill.mutual{ background: rgba(217,185,140,0.2); color: var(--gold); }
+  .pill.score{ background: rgba(127,166,217,0.2); color:#9DC0EE; }
+
+  .section-title{
+    font-size:13px; color:var(--text-dim); margin: 4px 0 10px;
+  }
+  .hint{ font-size:12.5px; color:var(--text-dim); margin-top:-6px; margin-bottom:14px; line-height:1.5; }
+  [hidden]{ display:none !important; }
+  .center{ text-align:center; }
+  .big-check{ font-size:44px; margin-bottom:6px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">💌</div>
+    <h1>로테이션 소개팅</h1>
+    <p class="subtitle">번호로 투표하고, 자동으로 매칭 받기</p>
+    <div class="rule"></div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" id="tab-participant" type="button">참가자</button>
+    <button class="tab" id="tab-admin" type="button">관리자</button>
+  </nav>
+
+  <!-- 참가자 화면 -->
+  <section id="panel-participant">
+
+    <div class="card" id="p-step-password">
+      <label for="p-pass">행사 비밀번호</label>
+      <input type="password" id="p-pass" placeholder="••••" inputmode="numeric" />
+      <div id="p-pass-msg"></div>
+      <button class="primary" id="p-pass-btn">입장하기</button>
+    </div>
+
+    <div class="card" id="p-step-number" hidden>
+      <div id="p-number-msg"></div>
+      <label for="p-number">본인의 번호를 선택하세요</label>
+      <select id="p-number">
+        <option value="">선택하세요</option>
+      </select>
+      <div class="hint">1~6번은 남성, 7~12번은 여성으로 자동 인식돼요.</div>
+    </div>
+
+    <div class="card" id="p-step-vote" hidden>
+      <span class="badge" id="p-vote-badge"></span>
+      <div id="p-vote-msg"></div>
+
+      <label for="p-rank1">🥇 1순위 (가장 마음에 드는 분)</label>
+      <select id="p-rank1"></select>
+
+      <label for="p-rank2">🥈 2순위</label>
+      <select id="p-rank2"></select>
+
+      <label for="p-rank3">🥉 3순위</label>
+      <select id="p-rank3"></select>
+
+      <button class="primary" id="p-submit-btn">투표 제출하기</button>
+    </div>
+
+    <div class="card center" id="p-step-done" hidden>
+      <div class="big-check">🎉</div>
+      <div id="p-done-text" style="font-weight:700; margin-bottom:4px;"></div>
+      <div class="hint">투표해주셔서 감사합니다. 매칭 결과는 관리자가 안내해드릴 거예요.</div>
+    </div>
+
+  </section>
+
+  <!-- 관리자 화면 -->
+  <section id="panel-admin" hidden>
+
+    <div class="card" id="a-step-password">
+      <label for="a-pass">관리자 비밀번호</label>
+      <input type="password" id="a-pass" placeholder="••••" inputmode="numeric" />
+      <div id="a-pass-msg"></div>
+      <button class="primary" id="a-pass-btn">관리자 입장</button>
+    </div>
+
+    <div id="a-dashboard" hidden>
+
+      <div class="card">
+        <div class="stat-row">
+          <div class="stat"><div class="num" id="a-count">0/12</div><div class="cap">투표 완료</div></div>
+          <div class="stat"><div class="num" id="a-male-count">0/6</div><div class="cap">남성 투표</div></div>
+          <div class="stat"><div class="num" id="a-female-count">0/6</div><div class="cap">여성 투표</div></div>
+        </div>
+        <div class="section-title">실시간 투표 현황 (색칠 = 투표 완료)</div>
+        <div class="grid12" id="a-grid"></div>
+        <button class="ghost" id="a-refresh-btn">🔄 새로고침</button>
+      </div>
+
+      <div class="card">
+        <div class="section-title">매칭 실행</div>
+        <button class="primary" id="a-match-btn">⚡ 자동 매칭 계산하기</button>
+        <div id="a-match-msg"></div>
+        <div id="a-match-result"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">행사 종료 후 초기화</div>
+        <div class="hint">다음 행사를 위해 모든 투표 기록을 삭제합니다. 되돌릴 수 없어요.</div>
+        <button class="ghost danger" id="a-reset-btn">🗑 투표 전체 초기화</button>
+      </div>
+
+    </div>
+
+  </section>
+</div>
+
+<script>
+(function(){
+  const EVENT_PASSWORD = "0910";
+  const ADMIN_PASSWORD = "1234";
+
+  // ⚠️ 여기에 본인의 Firebase Realtime Database 주소를 넣으세요.
+  // 예: "https://my-project-default-rtdb.asia-southeast1.firebasedatabase.app"
+  const FIREBASE_DB_URL = "https://ojakclub-default-rtdb.firebaseio.com";
+
+  const notConfigured = !FIREBASE_DB_URL || FIREBASE_DB_URL === "YOUR_FIREBASE_DATABASE_URL";
+  if (notConfigured){
+    document.querySelector('.app').innerHTML = `
+      <div class="card">
+        <div class="msg error">
+          ⚠️ 아직 데이터베이스 주소가 설정되지 않았어요.<br/><br/>
+          코드 상단의 <b>FIREBASE_DB_URL</b> 부분에 본인의 Firebase Realtime Database 주소를 넣어주세요.
+        </div>
+      </div>`;
+    return;
+  }
+
+  function numberToGender(n){ return n <= 6 ? "남성" : "여성"; }
+
+  // ---------- 탭 전환 ----------
+  const tabParticipant = document.getElementById('tab-participant');
+  const tabAdmin = document.getElementById('tab-admin');
+  const panelParticipant = document.getElementById('panel-participant');
+  const panelAdmin = document.getElementById('panel-admin');
+
+  tabParticipant.addEventListener('click', () => {
+    tabParticipant.classList.add('active');
+    tabAdmin.classList.remove('active');
+    panelParticipant.hidden = false;
+    panelAdmin.hidden = true;
+  });
+  tabAdmin.addEventListener('click', () => {
+    tabAdmin.classList.add('active');
+    tabParticipant.classList.remove('active');
+    panelAdmin.hidden = false;
+    panelParticipant.hidden = true;
+  });
+
+  // ---------- 저장소 헬퍼 (Firebase Realtime Database REST API) ----------
+  async function getVote(number){
+    const res = await fetch(`${FIREBASE_DB_URL}/votes/${number}.json`);
+    if (!res.ok) throw new Error('조회 실패');
+    return await res.json(); // 없으면 null
+  }
+  async function setVote(number, data){
+    const res = await fetch(`${FIREBASE_DB_URL}/votes/${number}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('저장 실패');
+  }
+  async function getAllVotes(){
+    const res = await fetch(`${FIREBASE_DB_URL}/votes.json`);
+    if (!res.ok) throw new Error('조회 실패');
+    const data = await res.json();
+    return data || {};
+  }
+  async function listVoteNumbers(){
+    const all = await getAllVotes();
+    return Object.keys(all).map(k => parseInt(k, 10));
+  }
+  async function deleteVote(number){
+    await fetch(`${FIREBASE_DB_URL}/votes/${number}.json`, { method: 'DELETE' });
+  }
+
+  // ================= 참가자 화면 =================
+  const pPassInput = document.getElementById('p-pass');
+  const pPassBtn = document.getElementById('p-pass-btn');
+  const pPassMsg = document.getElementById('p-pass-msg');
+  const pStepPassword = document.getElementById('p-step-password');
+  const pStepNumber = document.getElementById('p-step-number');
+  const pStepVote = document.getElementById('p-step-vote');
+  const pStepDone = document.getElementById('p-step-done');
+  const pNumberSelect = document.getElementById('p-number');
+  const pNumberMsg = document.getElementById('p-number-msg');
+  const pVoteBadge = document.getElementById('p-vote-badge');
+  const pVoteMsg = document.getElementById('p-vote-msg');
+  const pRank1 = document.getElementById('p-rank1');
+  const pRank2 = document.getElementById('p-rank2');
+  const pRank3 = document.getElementById('p-rank3');
+  const pSubmitBtn = document.getElementById('p-submit-btn');
+  const pDoneText = document.getElementById('p-done-text');
+
+  let myNumber = null;
+
+  // 번호 옵션 채우기 (1~12)
+  for (let i = 1; i <= 12; i++){
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${i}번 (${numberToGender(i)})`;
+    pNumberSelect.appendChild(opt);
+  }
+
+  pPassBtn.addEventListener('click', () => {
+    if (pPassInput.value === EVENT_PASSWORD){
+      pPassMsg.innerHTML = '';
+      pStepPassword.hidden = true;
+      pStepNumber.hidden = false;
+    } else {
+      pPassMsg.innerHTML = '<div class="msg error">비밀번호가 올바르지 않습니다.</div>';
+    }
+  });
+  pPassInput.addEventListener('keydown', e => { if(e.key === 'Enter') pPassBtn.click(); });
+
+  pNumberSelect.addEventListener('change', async () => {
+    const val = pNumberSelect.value;
+    pNumberMsg.innerHTML = '';
+    pStepVote.hidden = true;
+    if (!val) return;
+
+    myNumber = parseInt(val, 10);
+    let existing;
+    try {
+      existing = await getVote(myNumber);
+    } catch (e) {
+      pNumberMsg.innerHTML = '<div class="msg error">서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.</div>';
+      return;
+    }
+    if (existing){
+      pNumberMsg.innerHTML = `<div class="msg warn">⚠️ ${myNumber}번님은 이미 투표를 완료하셨습니다. 중복 투표는 불가능합니다.</div>`;
+      return;
+    }
+
+    const myGender = numberToGender(myNumber);
+    const oppositeGender = myGender === '남성' ? '여성' : '남성';
+    pVoteBadge.textContent = `${myNumber}번 (${myGender}) · ${oppositeGender} 참가자 중 선택`;
+
+    [pRank1, pRank2, pRank3].forEach(sel => {
+      sel.innerHTML = '';
+      const emptyOpt = document.createElement('option');
+      emptyOpt.value = '';
+      emptyOpt.textContent = sel === pRank1 ? '선택하세요' : '선택 안함';
+      sel.appendChild(emptyOpt);
+      const start = oppositeGender === '남성' ? 1 : 7;
+      const end = oppositeGender === '남성' ? 6 : 12;
+      for (let i = start; i <= end; i++){
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `${i}번 (${oppositeGender})`;
+        sel.appendChild(opt);
+      }
+    });
+
+    pVoteMsg.innerHTML = '';
+    pStepVote.hidden = false;
+  });
+
+  pSubmitBtn.addEventListener('click', async () => {
+    const r1 = pRank1.value, r2 = pRank2.value, r3 = pRank3.value;
+    if (!r1){
+      pVoteMsg.innerHTML = '<div class="msg error">최소 1순위는 선택해야 합니다.</div>';
+      return;
+    }
+    const chosen = [r1, r2, r3].filter(v => v);
+    if (new Set(chosen).size < chosen.length){
+      pVoteMsg.innerHTML = '<div class="msg error">중복된 상대를 선택할 수 없습니다.</div>';
+      return;
+    }
+
+    pSubmitBtn.disabled = true;
+    pSubmitBtn.textContent = '제출 중...';
+    try {
+      // 마지막 순간 중복 재확인
+      const existing = await getVote(myNumber);
+      if (existing){
+        pVoteMsg.innerHTML = '<div class="msg warn">⚠️ 이미 투표가 접수되어 있습니다.</div>';
+        pSubmitBtn.disabled = false;
+        pSubmitBtn.textContent = '투표 제출하기';
+        return;
+      }
+      await setVote(myNumber, {
+        rank1: parseInt(r1, 10),
+        rank2: r2 ? parseInt(r2, 10) : null,
+        rank3: r3 ? parseInt(r3, 10) : null,
+        ts: Date.now(),
+      });
+      pStepVote.hidden = true;
+      pDoneText.textContent = `${myNumber}번님의 투표가 성공적으로 제출되었습니다!`;
+      pStepDone.hidden = false;
+    } catch (e) {
+      pVoteMsg.innerHTML = '<div class="msg error">제출 중 오류가 발생했습니다. 다시 시도해주세요.</div>';
+      pSubmitBtn.disabled = false;
+      pSubmitBtn.textContent = '투표 제출하기';
+    }
+  });
+
+  // ================= 관리자 화면 =================
+  const aPassInput = document.getElementById('a-pass');
+  const aPassBtn = document.getElementById('a-pass-btn');
+  const aPassMsg = document.getElementById('a-pass-msg');
+  const aStepPassword = document.getElementById('a-step-password');
+  const aDashboard = document.getElementById('a-dashboard');
+  const aGrid = document.getElementById('a-grid');
+  const aCount = document.getElementById('a-count');
+  const aMaleCount = document.getElementById('a-male-count');
+  const aFemaleCount = document.getElementById('a-female-count');
+  const aRefreshBtn = document.getElementById('a-refresh-btn');
+  const aMatchBtn = document.getElementById('a-match-btn');
+  const aMatchMsg = document.getElementById('a-match-msg');
+  const aMatchResult = document.getElementById('a-match-result');
+  const aResetBtn = document.getElementById('a-reset-btn');
+
+  aPassBtn.addEventListener('click', () => {
+    if (aPassInput.value === ADMIN_PASSWORD){
+      aPassMsg.innerHTML = '';
+      aStepPassword.hidden = true;
+      aDashboard.hidden = false;
+      refreshDashboard();
+    } else {
+      aPassMsg.innerHTML = '<div class="msg error">비밀번호가 올바르지 않습니다.</div>';
+    }
+  });
+  aPassInput.addEventListener('keydown', e => { if(e.key === 'Enter') aPassBtn.click(); });
+
+  async function refreshDashboard(){
+    aGrid.innerHTML = '';
+    let votes;
+    try {
+      votes = await getAllVotes();
+    } catch (e) {
+      aGrid.innerHTML = '<div class="msg error" style="grid-column: 1 / -1;">서버에 연결할 수 없습니다.</div>';
+      return;
+    }
+    let maleVoted = 0, femaleVoted = 0;
+    for (let i = 1; i <= 12; i++){
+      const gender = numberToGender(i);
+      const voted = !!votes[i];
+      const dot = document.createElement('div');
+      dot.className = `dot ${gender === '남성' ? 'male' : 'female'}${voted ? ' voted' : ''}`;
+      dot.textContent = i;
+      aGrid.appendChild(dot);
+      if (voted){ gender === '남성' ? maleVoted++ : femaleVoted++; }
+    }
+    const total = maleVoted + femaleVoted;
+    aCount.textContent = `${total}/12`;
+    aMaleCount.textContent = `${maleVoted}/6`;
+    aFemaleCount.textContent = `${femaleVoted}/6`;
+  }
+
+  aRefreshBtn.addEventListener('click', refreshDashboard);
+
+  function runMatching(votes){
+    const matched = new Set();
+    const matches = [];
+
+    function isMale(n){ return n <= 6; }
+
+    // 1차: 상호 1순위
+    for (const voterStr of Object.keys(votes)){
+      const voter = parseInt(voterStr, 10);
+      if (matched.has(voter)) continue;
+      const v = votes[voter];
+      const target = v.rank1;
+      const tv = votes[target];
+      if (target && tv && tv.rank1 === voter && !matched.has(target)){
+        const male = isMale(voter) ? voter : target;
+        const female = isMale(voter) ? target : voter;
+        matches.push({ male, female, type: '상호 1순위', score: 6 });
+        matched.add(male); matched.add(female);
+      }
+    }
+
+    // 2차: 점수 기반
+    const scoreMap = { 1: 3, 2: 2, 3: 1 };
+    const scoreMatrix = [];
+    for (const voterStr of Object.keys(votes)){
+      const voter = parseInt(voterStr, 10);
+      if (matched.has(voter)) continue;
+      const v = votes[voter];
+      const targets = [v.rank1, v.rank2, v.rank3];
+      targets.forEach((target, idx) => {
+        if (!target || matched.has(target)) return;
+        const myScore = scoreMap[idx + 1] || 0;
+        let otherScore = 0;
+        const tv = votes[target];
+        if (tv){
+          const otherTargets = [tv.rank1, tv.rank2, tv.rank3];
+          const otherRank = otherTargets.indexOf(voter);
+          if (otherRank !== -1) otherScore = scoreMap[otherRank + 1] || 0;
+        }
+        const totalScore = myScore + otherScore;
+        const male = isMale(voter) ? voter : target;
+        const female = isMale(voter) ? target : voter;
+        const earlierTime = Math.min(v.ts || Infinity, tv ? (tv.ts || Infinity) : Infinity);
+        scoreMatrix.push({ male, female, score: totalScore, time: earlierTime });
+      });
+    }
+    scoreMatrix.sort((a, b) => b.score - a.score || a.time - b.time);
+    for (const item of scoreMatrix){
+      if (!matched.has(item.male) && !matched.has(item.female)){
+        matches.push({ male: item.male, female: item.female, type: '점수 매칭', score: item.score });
+        matched.add(item.male); matched.add(item.female);
+      }
+    }
+    return matches;
+  }
+
+  aMatchBtn.addEventListener('click', async () => {
+    aMatchMsg.innerHTML = '';
+    aMatchResult.innerHTML = '';
+    let votes;
+    try {
+      votes = await getAllVotes();
+    } catch (e) {
+      aMatchMsg.innerHTML = '<div class="msg error">서버에 연결할 수 없습니다.</div>';
+      return;
+    }
+    if (Object.keys(votes).length === 0){
+      aMatchMsg.innerHTML = '<div class="msg error">투표 데이터가 없습니다.</div>';
+      return;
+    }
+    const results = runMatching(votes);
+    if (results.length === 0){
+      aMatchMsg.innerHTML = '<div class="msg warn">매칭 가능한 커플이 없습니다.</div>';
+      return;
+    }
+    let rows = results.map(m => `
+      <tr>
+        <td>${m.male}번</td>
+        <td>${m.female}번</td>
+        <td><span class="pill ${m.type === '상호 1순위' ? 'mutual' : 'score'}">${m.type}</span></td>
+        <td>${m.score}점</td>
+      </tr>`).join('');
+    aMatchResult.innerHTML = `
+      <table>
+        <thead><tr><th>남성</th><th>여성</th><th>유형</th><th>점수</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    aMatchMsg.innerHTML = `<div class="msg success">🎯 총 ${results.length}쌍 매칭 완료!</div>`;
+  });
+
+  aResetBtn.addEventListener('click', async () => {
+    if (!confirm('정말 모든 투표 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
+    const numbers = await listVoteNumbers();
+    for (const n of numbers){ await deleteVote(n); }
+    aMatchResult.innerHTML = '';
+    aMatchMsg.innerHTML = '<div class="msg success">투표 기록이 모두 초기화되었습니다.</div>';
+    refreshDashboard();
+  });
+
+})();
+</script>
+</body>
+</html>
