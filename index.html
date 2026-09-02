@@ -90,7 +90,7 @@
   }
 
   label{ display:block; font-size:13px; color:var(--text-dim); margin-bottom:6px; }
-  input[type=password], select{
+  input[type=password], input[type=text], input[type=date], select{
     width:100%;
     padding:12px 14px;
     border-radius:10px;
@@ -203,9 +203,10 @@
   .stat .num{ font-family:'Noto Serif KR', serif; font-size:22px; font-weight:700; }
   .stat .cap{ font-size:12px; color:var(--text-dim); margin-top:2px; }
 
-  table{ width:100%; border-collapse:collapse; font-size:13.5px; margin-top:6px; }
-  th, td{ text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
-  th{ color:var(--text-dim); font-weight:500; font-size:12.5px; }
+  .table-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+  th, td{ text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  th{ color:var(--text-dim); font-weight:500; font-size:12px; }
   .pill{
     display:inline-block; padding:2px 8px; border-radius:999px;
     font-size:11.5px; font-weight:700;
@@ -220,6 +221,12 @@
   [hidden]{ display:none !important; }
   .center{ text-align:center; }
   .big-check{ font-size:44px; margin-bottom:6px; }
+  .round-chip{
+    display:inline-flex; align-items:center; gap:6px;
+    background: var(--card-2); border:1px solid var(--border);
+    border-radius:999px; padding:5px 12px; font-size:12.5px; color:var(--gold);
+    margin-bottom:14px;
+  }
 </style>
 </head>
 <body>
@@ -247,6 +254,7 @@
     </div>
 
     <div class="card" id="p-step-number" hidden>
+      <span class="round-chip" id="p-round-chip"></span>
       <div id="p-number-msg"></div>
       <label for="p-number">본인의 번호를 선택하세요</label>
       <select id="p-number">
@@ -291,7 +299,27 @@
 
     <div id="a-dashboard" hidden>
 
+      <!-- 회차 추가 -->
       <div class="card">
+        <div class="section-title">새 회차 추가</div>
+        <label for="a-round-name">회차 이름</label>
+        <input type="text" id="a-round-name" placeholder="예: 1회차" />
+        <label for="a-round-date">행사 날짜</label>
+        <input type="date" id="a-round-date" />
+        <div class="hint">날짜를 넣으면 참가자 비밀번호(MMDD)가 자동으로 만들어져요. 예: 9월 10일 → 0910</div>
+        <div id="a-round-create-msg"></div>
+        <button class="primary" id="a-round-create-btn">➕ 회차 추가</button>
+      </div>
+
+      <!-- 회차 선택 -->
+      <div class="card">
+        <div class="section-title">조회할 회차 선택</div>
+        <select id="a-round-select"><option value="">회차를 먼저 추가하세요</option></select>
+        <div id="a-round-info" class="hint" style="margin-top:-6px;"></div>
+      </div>
+
+      <!-- 투표 현황 -->
+      <div class="card" id="a-stats-card" hidden>
         <div class="stat-row">
           <div class="stat"><div class="num" id="a-count">0/12</div><div class="cap">투표 완료</div></div>
           <div class="stat"><div class="num" id="a-male-count">0/6</div><div class="cap">남성 투표</div></div>
@@ -302,17 +330,33 @@
         <button class="ghost" id="a-refresh-btn">🔄 새로고침</button>
       </div>
 
-      <div class="card">
+      <!-- 참가자별 투표 상세 -->
+      <div class="card" id="a-votes-detail-card" hidden>
+        <div class="section-title">참가자별 투표 상세</div>
+        <div class="table-wrap">
+          <table id="a-votes-table">
+            <thead><tr><th>번호</th><th>성별</th><th>1순위</th><th>2순위</th><th>3순위</th><th>제출시각</th></tr></thead>
+            <tbody id="a-votes-tbody"></tbody>
+          </table>
+        </div>
+        <div id="a-votes-empty" class="hint" hidden>아직 투표한 사람이 없어요.</div>
+        <button class="ghost" id="a-export-votes-btn">📥 투표 내역 엑셀로 내보내기</button>
+      </div>
+
+      <!-- 매칭 실행 -->
+      <div class="card" id="a-match-card" hidden>
         <div class="section-title">매칭 실행</div>
         <button class="primary" id="a-match-btn">⚡ 자동 매칭 계산하기</button>
         <div id="a-match-msg"></div>
         <div id="a-match-result"></div>
+        <button class="ghost" id="a-export-match-btn" hidden>📥 매칭 결과 엑셀로 내보내기</button>
       </div>
 
-      <div class="card">
-        <div class="section-title">행사 종료 후 초기화</div>
-        <div class="hint">다음 행사를 위해 모든 투표 기록을 삭제합니다. 되돌릴 수 없어요.</div>
-        <button class="ghost danger" id="a-reset-btn">🗑 투표 전체 초기화</button>
+      <!-- 초기화 -->
+      <div class="card" id="a-reset-card" hidden>
+        <div class="section-title">이 회차 초기화</div>
+        <div class="hint">선택된 회차의 투표 기록만 삭제합니다. 되돌릴 수 없어요.</div>
+        <button class="ghost danger" id="a-reset-btn">🗑 이 회차 투표 초기화</button>
       </div>
 
     </div>
@@ -322,11 +366,9 @@
 
 <script>
 (function(){
-  const EVENT_PASSWORD = "0910";
   const ADMIN_PASSWORD = "1234";
 
   // ⚠️ 여기에 본인의 Firebase Realtime Database 주소를 넣으세요.
-  // 예: "https://my-project-default-rtdb.asia-southeast1.firebasedatabase.app"
   const FIREBASE_DB_URL = "https://ojakclub-default-rtdb.firebaseio.com";
 
   const notConfigured = !FIREBASE_DB_URL || FIREBASE_DB_URL === "YOUR_FIREBASE_DATABASE_URL";
@@ -342,6 +384,17 @@
   }
 
   function numberToGender(n){ return n <= 6 ? "남성" : "여성"; }
+  function fmtDate(d){
+    if(!d) return '';
+    const parts = d.split('-');
+    if(parts.length < 3) return d;
+    return `${parseInt(parts[1],10)}/${parseInt(parts[2],10)}`;
+  }
+  function deriveMMDD(dateStr){
+    const parts = dateStr.split('-');
+    if (parts.length < 3) return '';
+    return parts[1] + parts[2];
+  }
 
   // ---------- 탭 전환 ----------
   const tabParticipant = document.getElementById('tab-participant');
@@ -362,32 +415,80 @@
     panelParticipant.hidden = true;
   });
 
-  // ---------- 저장소 헬퍼 (Firebase Realtime Database REST API) ----------
-  async function getVote(number){
-    const res = await fetch(`${FIREBASE_DB_URL}/votes/${number}.json`);
+  // ---------- 회차(rounds) 헬퍼 ----------
+  async function fetchRounds(){
+    const res = await fetch(`${FIREBASE_DB_URL}/rounds.json`);
     if (!res.ok) throw new Error('조회 실패');
-    return await res.json(); // 없으면 null
+    return (await res.json()) || {};
   }
-  async function setVote(number, data){
-    const res = await fetch(`${FIREBASE_DB_URL}/votes/${number}.json`, {
+  async function createRound(name, dateStr){
+    const rounds = await fetchRounds();
+    const password = deriveMMDD(dateStr);
+    if (!password) throw new Error('INVALID_DATE');
+    const dup = Object.values(rounds).find(r => r.password === password);
+    if (dup) throw new Error('DUP');
+    const id = 'r' + Date.now();
+    const data = { name, date: dateStr, password, createdAt: Date.now() };
+    const res = await fetch(`${FIREBASE_DB_URL}/rounds/${id}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('저장 실패');
+    return id;
+  }
+  async function findRoundByPassword(pw){
+    const rounds = await fetchRounds();
+    let found = null;
+    for (const [id, r] of Object.entries(rounds)){
+      if (r.password === pw){
+        if (!found || r.createdAt > found.createdAt) found = { id, ...r };
+      }
+    }
+    return found;
+  }
+
+  // ---------- 투표 저장소 헬퍼 (회차별) ----------
+  async function getVote(roundId, number){
+    const res = await fetch(`${FIREBASE_DB_URL}/votes/${roundId}/${number}.json`);
+    if (!res.ok) throw new Error('조회 실패');
+    return await res.json();
+  }
+  async function setVote(roundId, number, data){
+    const res = await fetch(`${FIREBASE_DB_URL}/votes/${roundId}/${number}.json`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('저장 실패');
   }
-  async function getAllVotes(){
-    const res = await fetch(`${FIREBASE_DB_URL}/votes.json`);
+  async function getAllVotes(roundId){
+    const res = await fetch(`${FIREBASE_DB_URL}/votes/${roundId}.json`);
     if (!res.ok) throw new Error('조회 실패');
     const data = await res.json();
     return data || {};
   }
-  async function listVoteNumbers(){
-    const all = await getAllVotes();
+  async function listVoteNumbers(roundId){
+    const all = await getAllVotes(roundId);
     return Object.keys(all).map(k => parseInt(k, 10));
   }
-  async function deleteVote(number){
-    await fetch(`${FIREBASE_DB_URL}/votes/${number}.json`, { method: 'DELETE' });
+  async function deleteVote(roundId, number){
+    await fetch(`${FIREBASE_DB_URL}/votes/${roundId}/${number}.json`, { method: 'DELETE' });
+  }
+
+  // ---------- 엑셀(CSV) 내보내기 ----------
+  function downloadCSV(filename, headerRow, rows){
+    const all = [headerRow, ...rows];
+    const csv = all.map(r => r.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // ================= 참가자 화면 =================
@@ -398,6 +499,7 @@
   const pStepNumber = document.getElementById('p-step-number');
   const pStepVote = document.getElementById('p-step-vote');
   const pStepDone = document.getElementById('p-step-done');
+  const pRoundChip = document.getElementById('p-round-chip');
   const pNumberSelect = document.getElementById('p-number');
   const pNumberMsg = document.getElementById('p-number-msg');
   const pVoteBadge = document.getElementById('p-vote-badge');
@@ -409,6 +511,7 @@
   const pDoneText = document.getElementById('p-done-text');
 
   let myNumber = null;
+  let myRoundId = null;
 
   // 번호 옵션 채우기 (1~12)
   for (let i = 1; i <= 12; i++){
@@ -418,16 +521,27 @@
     pNumberSelect.appendChild(opt);
   }
 
-  pPassBtn.addEventListener('click', () => {
-    if (pPassInput.value === EVENT_PASSWORD){
-      pPassMsg.innerHTML = '';
-      pStepPassword.hidden = true;
-      pStepNumber.hidden = false;
-    } else {
-      pPassMsg.innerHTML = '<div class="msg error">비밀번호가 올바르지 않습니다.</div>';
+  pPassBtn.addEventListener('click', async () => {
+    const pw = pPassInput.value;
+    pPassBtn.disabled = true;
+    pPassMsg.innerHTML = '';
+    try {
+      const round = await findRoundByPassword(pw);
+      if (round){
+        myRoundId = round.id;
+        pRoundChip.textContent = `${round.name} · ${fmtDate(round.date)}`;
+        pStepPassword.hidden = true;
+        pStepNumber.hidden = false;
+      } else {
+        pPassMsg.innerHTML = '<div class="msg error">비밀번호가 올바르지 않습니다.</div>';
+      }
+    } catch (e) {
+      pPassMsg.innerHTML = '<div class="msg error">서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.</div>';
+    } finally {
+      pPassBtn.disabled = false;
     }
   });
-  pPassInput.addEventListener('keydown', e => { if(e.key === 'Enter') pPassBtn.click(); });
+  pPassInput.addEventListener('keydown', e => { if (e.key === 'Enter') pPassBtn.click(); });
 
   pNumberSelect.addEventListener('change', async () => {
     const val = pNumberSelect.value;
@@ -438,7 +552,7 @@
     myNumber = parseInt(val, 10);
     let existing;
     try {
-      existing = await getVote(myNumber);
+      existing = await getVote(myRoundId, myNumber);
     } catch (e) {
       pNumberMsg.innerHTML = '<div class="msg error">서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.</div>';
       return;
@@ -487,15 +601,14 @@
     pSubmitBtn.disabled = true;
     pSubmitBtn.textContent = '제출 중...';
     try {
-      // 마지막 순간 중복 재확인
-      const existing = await getVote(myNumber);
+      const existing = await getVote(myRoundId, myNumber);
       if (existing){
         pVoteMsg.innerHTML = '<div class="msg warn">⚠️ 이미 투표가 접수되어 있습니다.</div>';
         pSubmitBtn.disabled = false;
         pSubmitBtn.textContent = '투표 제출하기';
         return;
       }
-      await setVote(myNumber, {
+      await setVote(myRoundId, myNumber, {
         rank1: parseInt(r1, 10),
         rank2: r2 ? parseInt(r2, 10) : null,
         rank3: r3 ? parseInt(r3, 10) : null,
@@ -517,33 +630,145 @@
   const aPassMsg = document.getElementById('a-pass-msg');
   const aStepPassword = document.getElementById('a-step-password');
   const aDashboard = document.getElementById('a-dashboard');
+
+  const aRoundName = document.getElementById('a-round-name');
+  const aRoundDate = document.getElementById('a-round-date');
+  const aRoundCreateBtn = document.getElementById('a-round-create-btn');
+  const aRoundCreateMsg = document.getElementById('a-round-create-msg');
+  const aRoundSelect = document.getElementById('a-round-select');
+  const aRoundInfo = document.getElementById('a-round-info');
+
+  const aStatsCard = document.getElementById('a-stats-card');
   const aGrid = document.getElementById('a-grid');
   const aCount = document.getElementById('a-count');
   const aMaleCount = document.getElementById('a-male-count');
   const aFemaleCount = document.getElementById('a-female-count');
   const aRefreshBtn = document.getElementById('a-refresh-btn');
+
+  const aVotesDetailCard = document.getElementById('a-votes-detail-card');
+  const aVotesTbody = document.getElementById('a-votes-tbody');
+  const aVotesEmpty = document.getElementById('a-votes-empty');
+  const aExportVotesBtn = document.getElementById('a-export-votes-btn');
+
+  const aMatchCard = document.getElementById('a-match-card');
   const aMatchBtn = document.getElementById('a-match-btn');
   const aMatchMsg = document.getElementById('a-match-msg');
   const aMatchResult = document.getElementById('a-match-result');
+  const aExportMatchBtn = document.getElementById('a-export-match-btn');
+
+  const aResetCard = document.getElementById('a-reset-card');
   const aResetBtn = document.getElementById('a-reset-btn');
 
-  aPassBtn.addEventListener('click', () => {
+  let allRounds = {};
+  let currentRoundId = null;
+  let lastVotesCache = {};
+  let lastMatchCache = [];
+
+  aPassBtn.addEventListener('click', async () => {
     if (aPassInput.value === ADMIN_PASSWORD){
       aPassMsg.innerHTML = '';
       aStepPassword.hidden = true;
       aDashboard.hidden = false;
-      refreshDashboard();
+      await loadRounds();
     } else {
       aPassMsg.innerHTML = '<div class="msg error">비밀번호가 올바르지 않습니다.</div>';
     }
   });
-  aPassInput.addEventListener('keydown', e => { if(e.key === 'Enter') aPassBtn.click(); });
+  aPassInput.addEventListener('keydown', e => { if (e.key === 'Enter') aPassBtn.click(); });
+
+  async function loadRounds(){
+    try {
+      allRounds = await fetchRounds();
+    } catch (e) {
+      aRoundInfo.innerHTML = '<div class="msg error">회차 목록을 불러오지 못했습니다.</div>';
+      return;
+    }
+    const entries = Object.entries(allRounds).sort((a, b) => b[1].createdAt - a[1].createdAt);
+    aRoundSelect.innerHTML = '';
+    if (entries.length === 0){
+      aRoundSelect.innerHTML = '<option value="">회차를 먼저 추가하세요</option>';
+      currentRoundId = null;
+      showRoundDependentCards(false);
+      return;
+    }
+    for (const [id, r] of entries){
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = `${r.name} · ${fmtDate(r.date)} · 비번 ${r.password}`;
+      aRoundSelect.appendChild(opt);
+    }
+    currentRoundId = entries[0][0];
+    aRoundSelect.value = currentRoundId;
+    await onRoundSelected();
+  }
+
+  aRoundCreateBtn.addEventListener('click', async () => {
+    const name = aRoundName.value.trim();
+    const dateStr = aRoundDate.value;
+    aRoundCreateMsg.innerHTML = '';
+    if (!name || !dateStr){
+      aRoundCreateMsg.innerHTML = '<div class="msg error">회차 이름과 날짜를 모두 입력해주세요.</div>';
+      return;
+    }
+    aRoundCreateBtn.disabled = true;
+    try {
+      const id = await createRound(name, dateStr);
+      const password = deriveMMDD(dateStr);
+      aRoundCreateMsg.innerHTML = `<div class="msg success">✅ "${name}" 회차가 추가됐어요. 참가자 비밀번호: <b>${password}</b></div>`;
+      aRoundName.value = '';
+      aRoundDate.value = '';
+      await loadRounds();
+      aRoundSelect.value = id;
+      currentRoundId = id;
+      await onRoundSelected();
+    } catch (e) {
+      if (e.message === 'DUP'){
+        aRoundCreateMsg.innerHTML = '<div class="msg error">이미 같은 날짜(비밀번호)의 회차가 있습니다. 다른 날짜를 선택해주세요.</div>';
+      } else if (e.message === 'INVALID_DATE'){
+        aRoundCreateMsg.innerHTML = '<div class="msg error">날짜를 올바르게 선택해주세요.</div>';
+      } else {
+        aRoundCreateMsg.innerHTML = '<div class="msg error">회차 추가에 실패했습니다. 다시 시도해주세요.</div>';
+      }
+    } finally {
+      aRoundCreateBtn.disabled = false;
+    }
+  });
+
+  aRoundSelect.addEventListener('change', async () => {
+    currentRoundId = aRoundSelect.value || null;
+    await onRoundSelected();
+  });
+
+  function showRoundDependentCards(show){
+    aStatsCard.hidden = !show;
+    aVotesDetailCard.hidden = !show;
+    aMatchCard.hidden = !show;
+    aResetCard.hidden = !show;
+  }
+
+  async function onRoundSelected(){
+    if (!currentRoundId){
+      showRoundDependentCards(false);
+      aRoundInfo.textContent = '';
+      return;
+    }
+    const r = allRounds[currentRoundId];
+    aRoundInfo.textContent = r ? `${r.name} · ${fmtDate(r.date)} · 참가자 비밀번호 ${r.password}` : '';
+    showRoundDependentCards(true);
+    aMatchResult.innerHTML = '';
+    aMatchMsg.innerHTML = '';
+    aExportMatchBtn.hidden = true;
+    lastMatchCache = [];
+    await refreshDashboard();
+    await refreshVotesTable();
+  }
 
   async function refreshDashboard(){
     aGrid.innerHTML = '';
+    if (!currentRoundId) return;
     let votes;
     try {
-      votes = await getAllVotes();
+      votes = await getAllVotes(currentRoundId);
     } catch (e) {
       aGrid.innerHTML = '<div class="msg error" style="grid-column: 1 / -1;">서버에 연결할 수 없습니다.</div>';
       return;
@@ -564,7 +789,60 @@
     aFemaleCount.textContent = `${femaleVoted}/6`;
   }
 
-  aRefreshBtn.addEventListener('click', refreshDashboard);
+  async function refreshVotesTable(){
+    aVotesTbody.innerHTML = '';
+    if (!currentRoundId) return;
+    let votes;
+    try {
+      votes = await getAllVotes(currentRoundId);
+    } catch (e) {
+      aVotesEmpty.hidden = false;
+      aVotesEmpty.textContent = '서버에 연결할 수 없습니다.';
+      return;
+    }
+    lastVotesCache = votes;
+    const numbers = Object.keys(votes).map(n => parseInt(n, 10)).sort((a, b) => a - b);
+    if (numbers.length === 0){
+      aVotesEmpty.hidden = false;
+      aVotesEmpty.textContent = '아직 투표한 사람이 없어요.';
+      return;
+    }
+    aVotesEmpty.hidden = true;
+    for (const n of numbers){
+      const v = votes[n];
+      const tr = document.createElement('tr');
+      const timeStr = v.ts ? new Date(v.ts).toLocaleString('ko-KR') : '';
+      tr.innerHTML = `
+        <td>${n}번</td>
+        <td>${numberToGender(n)}</td>
+        <td>${v.rank1 ? v.rank1 + '번' : '-'}</td>
+        <td>${v.rank2 ? v.rank2 + '번' : '-'}</td>
+        <td>${v.rank3 ? v.rank3 + '번' : '-'}</td>
+        <td>${timeStr}</td>`;
+      aVotesTbody.appendChild(tr);
+    }
+  }
+
+  aRefreshBtn.addEventListener('click', () => { refreshDashboard(); refreshVotesTable(); });
+
+  aExportVotesBtn.addEventListener('click', () => {
+    const numbers = Object.keys(lastVotesCache).map(n => parseInt(n, 10)).sort((a, b) => a - b);
+    if (numbers.length === 0) return;
+    const r = allRounds[currentRoundId];
+    const rows = numbers.map(n => {
+      const v = lastVotesCache[n];
+      return [
+        n + '번',
+        numberToGender(n),
+        v.rank1 ? v.rank1 + '번' : '',
+        v.rank2 ? v.rank2 + '번' : '',
+        v.rank3 ? v.rank3 + '번' : '',
+        v.ts ? new Date(v.ts).toLocaleString('ko-KR') : '',
+      ];
+    });
+    const filename = `투표내역_${r ? r.name : currentRoundId}.csv`;
+    downloadCSV(filename, ['번호', '성별', '1순위', '2순위', '3순위', '제출시각'], rows);
+  });
 
   function runMatching(votes){
     const matched = new Set();
@@ -572,7 +850,6 @@
 
     function isMale(n){ return n <= 6; }
 
-    // 1차: 상호 1순위
     for (const voterStr of Object.keys(votes)){
       const voter = parseInt(voterStr, 10);
       if (matched.has(voter)) continue;
@@ -587,7 +864,6 @@
       }
     }
 
-    // 2차: 점수 기반
     const scoreMap = { 1: 3, 2: 2, 3: 1 };
     const scoreMatrix = [];
     for (const voterStr of Object.keys(votes)){
@@ -625,9 +901,11 @@
   aMatchBtn.addEventListener('click', async () => {
     aMatchMsg.innerHTML = '';
     aMatchResult.innerHTML = '';
+    aExportMatchBtn.hidden = true;
+    if (!currentRoundId) return;
     let votes;
     try {
-      votes = await getAllVotes();
+      votes = await getAllVotes(currentRoundId);
     } catch (e) {
       aMatchMsg.innerHTML = '<div class="msg error">서버에 연결할 수 없습니다.</div>';
       return;
@@ -637,6 +915,7 @@
       return;
     }
     const results = runMatching(votes);
+    lastMatchCache = results;
     if (results.length === 0){
       aMatchMsg.innerHTML = '<div class="msg warn">매칭 가능한 커플이 없습니다.</div>';
       return;
@@ -649,20 +928,34 @@
         <td>${m.score}점</td>
       </tr>`).join('');
     aMatchResult.innerHTML = `
-      <table>
-        <thead><tr><th>남성</th><th>여성</th><th>유형</th><th>점수</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>남성</th><th>여성</th><th>유형</th><th>점수</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
     aMatchMsg.innerHTML = `<div class="msg success">🎯 총 ${results.length}쌍 매칭 완료!</div>`;
+    aExportMatchBtn.hidden = false;
+  });
+
+  aExportMatchBtn.addEventListener('click', () => {
+    if (lastMatchCache.length === 0) return;
+    const r = allRounds[currentRoundId];
+    const rows = lastMatchCache.map(m => [`${m.male}번`, `${m.female}번`, m.type, m.score]);
+    const filename = `매칭결과_${r ? r.name : currentRoundId}.csv`;
+    downloadCSV(filename, ['남성', '여성', '유형', '점수'], rows);
   });
 
   aResetBtn.addEventListener('click', async () => {
-    if (!confirm('정말 모든 투표 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
-    const numbers = await listVoteNumbers();
-    for (const n of numbers){ await deleteVote(n); }
+    if (!currentRoundId) return;
+    if (!confirm('정말 이 회차의 모든 투표 기록을 삭제할까요? 되돌릴 수 없습니다.')) return;
+    const numbers = await listVoteNumbers(currentRoundId);
+    for (const n of numbers){ await deleteVote(currentRoundId, n); }
     aMatchResult.innerHTML = '';
-    aMatchMsg.innerHTML = '<div class="msg success">투표 기록이 모두 초기화되었습니다.</div>';
+    aMatchMsg.innerHTML = '<div class="msg success">이 회차의 투표 기록이 모두 초기화되었습니다.</div>';
+    aExportMatchBtn.hidden = true;
     refreshDashboard();
+    refreshVotesTable();
   });
 
 })();
