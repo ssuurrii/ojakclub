@@ -169,28 +169,27 @@
     margin-bottom:14px;
   }
 
-  .grid12{
+  .name-list{
     display:grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap:8px;
-    margin: 14px 0 4px;
+    margin: 10px 0 4px;
   }
-  .dot{
-    aspect-ratio:1;
+  .name-chip{
+    padding:10px 6px;
     border-radius:10px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
+    text-align:center;
     font-size:13px;
     font-weight:700;
     border:1px solid var(--border);
     color: var(--text-dim);
     background: var(--card-2);
   }
-  .dot.male{ border-color: rgba(127,166,217,0.35); }
-  .dot.female{ border-color: rgba(232,116,138,0.35); }
-  .dot.voted.male{ background: rgba(127,166,217,0.25); color:#DCE8FA; }
-  .dot.voted.female{ background: rgba(232,116,138,0.22); color:#FBDDE4; }
+  .name-chip.male{ border-color: rgba(127,166,217,0.35); }
+  .name-chip.female{ border-color: rgba(232,116,138,0.35); }
+  .name-chip.voted.male{ background: rgba(127,166,217,0.25); color:#DCE8FA; }
+  .name-chip.voted.female{ background: rgba(232,116,138,0.22); color:#FBDDE4; }
+  .group-label{ font-size:12px; color:var(--text-dim); margin: 12px 0 4px; }
 
   .stat-row{ display:flex; gap:10px; margin-bottom:14px; }
   .stat{
@@ -234,7 +233,7 @@
   <header>
     <div class="logo">💌</div>
     <h1>로테이션 소개팅</h1>
-    <p class="subtitle">번호로 투표하고, 자동으로 매칭 받기</p>
+    <p class="subtitle">닉네임으로 투표하고, 자동으로 매칭 받기</p>
     <div class="rule"></div>
   </header>
 
@@ -256,11 +255,10 @@
     <div class="card" id="p-step-number" hidden>
       <span class="round-chip" id="p-round-chip"></span>
       <div id="p-number-msg"></div>
-      <label for="p-number">본인의 번호를 선택하세요</label>
+      <label for="p-number">본인의 닉네임을 선택하세요</label>
       <select id="p-number">
         <option value="">선택하세요</option>
       </select>
-      <div class="hint">1~6번은 남성, 7~12번은 여성으로 자동 인식돼요.</div>
     </div>
 
     <div class="card" id="p-step-vote" hidden>
@@ -272,9 +270,6 @@
 
       <label for="p-rank2">🥈 2순위</label>
       <select id="p-rank2"></select>
-
-      <label for="p-rank3">🥉 3순위</label>
-      <select id="p-rank3"></select>
 
       <button class="primary" id="p-submit-btn">투표 제출하기</button>
     </div>
@@ -326,7 +321,10 @@
           <div class="stat"><div class="num" id="a-female-count">0/6</div><div class="cap">여성 투표</div></div>
         </div>
         <div class="section-title">실시간 투표 현황 (색칠 = 투표 완료)</div>
-        <div class="grid12" id="a-grid"></div>
+        <div class="group-label">남성</div>
+        <div class="name-list" id="a-grid-male"></div>
+        <div class="group-label">여성</div>
+        <div class="name-list" id="a-grid-female"></div>
         <button class="ghost" id="a-refresh-btn">🔄 새로고침</button>
       </div>
 
@@ -335,7 +333,7 @@
         <div class="section-title">참가자별 투표 상세</div>
         <div class="table-wrap">
           <table id="a-votes-table">
-            <thead><tr><th>번호</th><th>성별</th><th>1순위</th><th>2순위</th><th>3순위</th><th>제출시각</th></tr></thead>
+            <thead><tr><th>닉네임</th><th>성별</th><th>1순위</th><th>2순위</th><th>제출시각</th></tr></thead>
             <tbody id="a-votes-tbody"></tbody>
           </table>
         </div>
@@ -371,6 +369,20 @@
   // ⚠️ 여기에 본인의 Firebase Realtime Database 주소를 넣으세요.
   const FIREBASE_DB_URL = "https://ojakclub-default-rtdb.firebaseio.com";
 
+  // 닉네임 목록: 남성(1~6번), 여성(7~12번) — 순서를 바꾸면 매칭 로직이 깨지니 순서 유지 필수
+  const MALE_NAMES = ["벤츠", "롤렉스", "오메가", "파텍", "메종", "디올"];
+  const FEMALE_NAMES = ["미우미우", "샤넬", "구찌", "셀린", "펜디", "티파니"];
+
+  function numberToGender(n){ return n <= 6 ? "남성" : "여성"; }
+  function numberToName(n){ return n <= 6 ? MALE_NAMES[n - 1] : FEMALE_NAMES[n - 7]; }
+  function nameToNumber(name){
+    let idx = MALE_NAMES.indexOf(name);
+    if (idx !== -1) return idx + 1;
+    idx = FEMALE_NAMES.indexOf(name);
+    if (idx !== -1) return idx + 7;
+    return null;
+  }
+
   const notConfigured = !FIREBASE_DB_URL || FIREBASE_DB_URL === "YOUR_FIREBASE_DATABASE_URL";
   if (notConfigured){
     document.querySelector('.app').innerHTML = `
@@ -383,7 +395,6 @@
     return;
   }
 
-  function numberToGender(n){ return n <= 6 ? "남성" : "여성"; }
   function fmtDate(d){
     if(!d) return '';
     const parts = d.split('-');
@@ -506,18 +517,17 @@
   const pVoteMsg = document.getElementById('p-vote-msg');
   const pRank1 = document.getElementById('p-rank1');
   const pRank2 = document.getElementById('p-rank2');
-  const pRank3 = document.getElementById('p-rank3');
   const pSubmitBtn = document.getElementById('p-submit-btn');
   const pDoneText = document.getElementById('p-done-text');
 
   let myNumber = null;
   let myRoundId = null;
 
-  // 번호 옵션 채우기 (1~12)
+  // 닉네임 옵션 채우기 (1~12)
   for (let i = 1; i <= 12; i++){
     const opt = document.createElement('option');
     opt.value = i;
-    opt.textContent = `${i}번 (${numberToGender(i)})`;
+    opt.textContent = `${numberToName(i)} (${numberToGender(i)})`;
     pNumberSelect.appendChild(opt);
   }
 
@@ -558,26 +568,26 @@
       return;
     }
     if (existing){
-      pNumberMsg.innerHTML = `<div class="msg warn">⚠️ ${myNumber}번님은 이미 투표를 완료하셨습니다. 중복 투표는 불가능합니다.</div>`;
+      pNumberMsg.innerHTML = `<div class="msg warn">⚠️ ${numberToName(myNumber)}님은 이미 투표를 완료하셨습니다. 중복 투표는 불가능합니다.</div>`;
       return;
     }
 
     const myGender = numberToGender(myNumber);
     const oppositeGender = myGender === '남성' ? '여성' : '남성';
-    pVoteBadge.textContent = `${myNumber}번 (${myGender}) · ${oppositeGender} 참가자 중 선택`;
+    pVoteBadge.textContent = `${numberToName(myNumber)} (${myGender}) · ${oppositeGender} 참가자 중 2명 선택`;
 
-    [pRank1, pRank2, pRank3].forEach(sel => {
+    [pRank1, pRank2].forEach(sel => {
       sel.innerHTML = '';
       const emptyOpt = document.createElement('option');
       emptyOpt.value = '';
-      emptyOpt.textContent = sel === pRank1 ? '선택하세요' : '선택 안함';
+      emptyOpt.textContent = '선택하세요';
       sel.appendChild(emptyOpt);
       const start = oppositeGender === '남성' ? 1 : 7;
       const end = oppositeGender === '남성' ? 6 : 12;
       for (let i = start; i <= end; i++){
         const opt = document.createElement('option');
         opt.value = i;
-        opt.textContent = `${i}번 (${oppositeGender})`;
+        opt.textContent = `${numberToName(i)} (${oppositeGender})`;
         sel.appendChild(opt);
       }
     });
@@ -587,13 +597,12 @@
   });
 
   pSubmitBtn.addEventListener('click', async () => {
-    const r1 = pRank1.value, r2 = pRank2.value, r3 = pRank3.value;
-    if (!r1){
-      pVoteMsg.innerHTML = '<div class="msg error">최소 1순위는 선택해야 합니다.</div>';
+    const r1 = pRank1.value, r2 = pRank2.value;
+    if (!r1 || !r2){
+      pVoteMsg.innerHTML = '<div class="msg error">1순위와 2순위를 모두 선택해야 합니다.</div>';
       return;
     }
-    const chosen = [r1, r2, r3].filter(v => v);
-    if (new Set(chosen).size < chosen.length){
+    if (r1 === r2){
       pVoteMsg.innerHTML = '<div class="msg error">중복된 상대를 선택할 수 없습니다.</div>';
       return;
     }
@@ -610,12 +619,11 @@
       }
       await setVote(myRoundId, myNumber, {
         rank1: parseInt(r1, 10),
-        rank2: r2 ? parseInt(r2, 10) : null,
-        rank3: r3 ? parseInt(r3, 10) : null,
+        rank2: parseInt(r2, 10),
         ts: Date.now(),
       });
       pStepVote.hidden = true;
-      pDoneText.textContent = `${myNumber}번님의 투표가 성공적으로 제출되었습니다!`;
+      pDoneText.textContent = `${numberToName(myNumber)}님의 투표가 성공적으로 제출되었습니다!`;
       pStepDone.hidden = false;
     } catch (e) {
       pVoteMsg.innerHTML = '<div class="msg error">제출 중 오류가 발생했습니다. 다시 시도해주세요.</div>';
@@ -639,7 +647,8 @@
   const aRoundInfo = document.getElementById('a-round-info');
 
   const aStatsCard = document.getElementById('a-stats-card');
-  const aGrid = document.getElementById('a-grid');
+  const aGridMale = document.getElementById('a-grid-male');
+  const aGridFemale = document.getElementById('a-grid-female');
   const aCount = document.getElementById('a-count');
   const aMaleCount = document.getElementById('a-male-count');
   const aFemaleCount = document.getElementById('a-female-count');
@@ -764,23 +773,24 @@
   }
 
   async function refreshDashboard(){
-    aGrid.innerHTML = '';
+    aGridMale.innerHTML = '';
+    aGridFemale.innerHTML = '';
     if (!currentRoundId) return;
     let votes;
     try {
       votes = await getAllVotes(currentRoundId);
     } catch (e) {
-      aGrid.innerHTML = '<div class="msg error" style="grid-column: 1 / -1;">서버에 연결할 수 없습니다.</div>';
+      aGridMale.innerHTML = '<div class="msg error">서버에 연결할 수 없습니다.</div>';
       return;
     }
     let maleVoted = 0, femaleVoted = 0;
     for (let i = 1; i <= 12; i++){
       const gender = numberToGender(i);
       const voted = !!votes[i];
-      const dot = document.createElement('div');
-      dot.className = `dot ${gender === '남성' ? 'male' : 'female'}${voted ? ' voted' : ''}`;
-      dot.textContent = i;
-      aGrid.appendChild(dot);
+      const chip = document.createElement('div');
+      chip.className = `name-chip ${gender === '남성' ? 'male' : 'female'}${voted ? ' voted' : ''}`;
+      chip.textContent = numberToName(i);
+      (gender === '남성' ? aGridMale : aGridFemale).appendChild(chip);
       if (voted){ gender === '남성' ? maleVoted++ : femaleVoted++; }
     }
     const total = maleVoted + femaleVoted;
@@ -813,11 +823,10 @@
       const tr = document.createElement('tr');
       const timeStr = v.ts ? new Date(v.ts).toLocaleString('ko-KR') : '';
       tr.innerHTML = `
-        <td>${n}번</td>
+        <td>${numberToName(n)}</td>
         <td>${numberToGender(n)}</td>
-        <td>${v.rank1 ? v.rank1 + '번' : '-'}</td>
-        <td>${v.rank2 ? v.rank2 + '번' : '-'}</td>
-        <td>${v.rank3 ? v.rank3 + '번' : '-'}</td>
+        <td>${v.rank1 ? numberToName(v.rank1) : '-'}</td>
+        <td>${v.rank2 ? numberToName(v.rank2) : '-'}</td>
         <td>${timeStr}</td>`;
       aVotesTbody.appendChild(tr);
     }
@@ -832,16 +841,15 @@
     const rows = numbers.map(n => {
       const v = lastVotesCache[n];
       return [
-        n + '번',
+        numberToName(n),
         numberToGender(n),
-        v.rank1 ? v.rank1 + '번' : '',
-        v.rank2 ? v.rank2 + '번' : '',
-        v.rank3 ? v.rank3 + '번' : '',
+        v.rank1 ? numberToName(v.rank1) : '',
+        v.rank2 ? numberToName(v.rank2) : '',
         v.ts ? new Date(v.ts).toLocaleString('ko-KR') : '',
       ];
     });
     const filename = `투표내역_${r ? r.name : currentRoundId}.csv`;
-    downloadCSV(filename, ['번호', '성별', '1순위', '2순위', '3순위', '제출시각'], rows);
+    downloadCSV(filename, ['닉네임', '성별', '1순위', '2순위', '제출시각'], rows);
   });
 
   function runMatching(votes){
@@ -859,25 +867,25 @@
       if (target && tv && tv.rank1 === voter && !matched.has(target)){
         const male = isMale(voter) ? voter : target;
         const female = isMale(voter) ? target : voter;
-        matches.push({ male, female, type: '상호 1순위', score: 6 });
+        matches.push({ male, female, type: '상호 1순위', score: 5 });
         matched.add(male); matched.add(female);
       }
     }
 
-    const scoreMap = { 1: 3, 2: 2, 3: 1 };
+    const scoreMap = { 1: 3, 2: 2 };
     const scoreMatrix = [];
     for (const voterStr of Object.keys(votes)){
       const voter = parseInt(voterStr, 10);
       if (matched.has(voter)) continue;
       const v = votes[voter];
-      const targets = [v.rank1, v.rank2, v.rank3];
+      const targets = [v.rank1, v.rank2];
       targets.forEach((target, idx) => {
         if (!target || matched.has(target)) return;
         const myScore = scoreMap[idx + 1] || 0;
         let otherScore = 0;
         const tv = votes[target];
         if (tv){
-          const otherTargets = [tv.rank1, tv.rank2, tv.rank3];
+          const otherTargets = [tv.rank1, tv.rank2];
           const otherRank = otherTargets.indexOf(voter);
           if (otherRank !== -1) otherScore = scoreMap[otherRank + 1] || 0;
         }
@@ -922,8 +930,8 @@
     }
     let rows = results.map(m => `
       <tr>
-        <td>${m.male}번</td>
-        <td>${m.female}번</td>
+        <td>${numberToName(m.male)}</td>
+        <td>${numberToName(m.female)}</td>
         <td><span class="pill ${m.type === '상호 1순위' ? 'mutual' : 'score'}">${m.type}</span></td>
         <td>${m.score}점</td>
       </tr>`).join('');
@@ -941,7 +949,7 @@
   aExportMatchBtn.addEventListener('click', () => {
     if (lastMatchCache.length === 0) return;
     const r = allRounds[currentRoundId];
-    const rows = lastMatchCache.map(m => [`${m.male}번`, `${m.female}번`, m.type, m.score]);
+    const rows = lastMatchCache.map(m => [numberToName(m.male), numberToName(m.female), m.type, m.score]);
     const filename = `매칭결과_${r ? r.name : currentRoundId}.csv`;
     downloadCSV(filename, ['남성', '여성', '유형', '점수'], rows);
   });
@@ -962,4 +970,3 @@
 </script>
 </body>
 </html>
-
