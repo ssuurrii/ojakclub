@@ -818,8 +818,13 @@
       return;
     }
     aVotesEmpty.hidden = true;
+    let skippedCount = 0;
     for (const n of numbers){
       const v = votes[n];
+      if (!v || typeof v !== 'object' || !v.rank1){
+        skippedCount++;
+        continue; // 예전 버전 잔재 등 이상한 데이터는 건너뜀
+      }
       const tr = document.createElement('tr');
       const timeStr = v.ts ? new Date(v.ts).toLocaleString('ko-KR') : '';
       tr.innerHTML = `
@@ -829,6 +834,10 @@
         <td>${v.rank2 ? numberToName(v.rank2) : '-'}</td>
         <td>${timeStr}</td>`;
       aVotesTbody.appendChild(tr);
+    }
+    if (skippedCount > 0){
+      aVotesEmpty.hidden = false;
+      aVotesEmpty.textContent = `⚠️ 형식이 이상한 투표 ${skippedCount}건은 표에서 제외했어요. 필요하면 이 회차를 초기화하고 다시 투표받는 걸 권장해요.`;
     }
   }
 
@@ -922,7 +931,23 @@
       aMatchMsg.innerHTML = '<div class="msg error">투표 데이터가 없습니다.</div>';
       return;
     }
-    const results = runMatching(votes);
+    // 형식이 이상한(예전 버전 잔재 등) 투표는 매칭 전에 걸러낸다
+    const cleanVotes = {};
+    let skipped = 0;
+    for (const [k, v] of Object.entries(votes)){
+      if (v && typeof v === 'object' && v.rank1){
+        cleanVotes[k] = v;
+      } else {
+        skipped++;
+      }
+    }
+    let results;
+    try {
+      results = runMatching(cleanVotes);
+    } catch (e) {
+      aMatchMsg.innerHTML = '<div class="msg error">매칭 계산 중 오류가 발생했습니다. 이 회차를 초기화하고 다시 투표받아주세요.</div>';
+      return;
+    }
     lastMatchCache = results;
     if (results.length === 0){
       aMatchMsg.innerHTML = '<div class="msg warn">매칭 가능한 커플이 없습니다.</div>';
@@ -942,7 +967,9 @@
           <tbody>${rows}</tbody>
         </table>
       </div>`;
-    aMatchMsg.innerHTML = `<div class="msg success">🎯 총 ${results.length}쌍 매칭 완료!</div>`;
+    aMatchMsg.innerHTML = skipped > 0
+      ? `<div class="msg success">🎯 총 ${results.length}쌍 매칭 완료! (형식이 이상한 투표 ${skipped}건은 제외됨)</div>`
+      : `<div class="msg success">🎯 총 ${results.length}쌍 매칭 완료!</div>`;
     aExportMatchBtn.hidden = false;
   });
 
@@ -970,3 +997,4 @@
 </script>
 </body>
 </html>
+
