@@ -212,6 +212,9 @@
   }
   .pill.mutual{ background: rgba(217,185,140,0.2); color: var(--gold); }
   .pill.score{ background: rgba(127,166,217,0.2); color:#9DC0EE; }
+  .pill.random{ background: rgba(169,175,192,0.2); color: var(--text-dim); }
+  .check-row{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-dim); margin:0 0 6px; cursor:pointer; }
+  .check-row input{ width:18px; height:18px; margin:0; accent-color: var(--accent); }
 
   .section-title{
     font-size:13px; color:var(--text-dim); margin: 4px 0 10px;
@@ -347,7 +350,9 @@
       <!-- 매칭 실행 -->
       <div class="card" id="a-match-card" hidden>
         <div class="section-title">매칭 실행</div>
-        <button class="primary" id="a-match-btn">⚡ 자동 매칭 계산하기</button>
+        <div class="hint">서로 선택이 겹치는 사람부터 이어주고, 그래도 짝이 없는 사람은 랜덤으로 이어줘요. 투표 내용이 같으면 몇 번을 눌러도 같은 결과가 나와요.</div>
+        <label class="check-row"><input type="checkbox" id="a-random-nonvoters" checked /> 투표 안 한 사람도 랜덤 매칭에 포함</label>
+        <button class="primary" id="a-match-btn" style="margin-top:10px;">⚡ 자동 매칭 계산하기</button>
         <div id="a-match-msg"></div>
         <div id="a-match-result"></div>
         <button class="ghost" id="a-export-match-btn" hidden>📥 매칭 결과 엑셀로 내보내기</button>
@@ -358,6 +363,8 @@
         <div class="section-title">이 회차 초기화</div>
         <div class="hint">선택된 회차의 투표 기록만 삭제합니다. 되돌릴 수 없어요.</div>
         <button class="ghost danger" id="a-reset-btn">🗑 이 회차 투표 초기화</button>
+        <div class="hint" style="margin-top:14px;">회차 자체를 없애려면 아래 버튼을 눌러주세요. 투표 기록도 함께 삭제돼요.</div>
+        <button class="ghost danger" id="a-delete-round-btn">❌ 이 회차 삭제</button>
       </div>
 
     </div>
@@ -400,6 +407,28 @@
   function legacyKeyOf(id, size){
     const n = idNum(id);
     return String(idGender(id) === '남성' ? n : size + n);
+  }
+  // 같은 입력이면 같은 결과가 나오는 랜덤 (문자열 시드 기반)
+  function makeRng(seedStr){
+    let h = 1779033703 ^ seedStr.length;
+    for (let i = 0; i < seedStr.length; i++){
+      h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+      h = (h << 13) | (h >>> 19);
+    }
+    let a = h >>> 0;
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffleWith(arr, rng){
+    for (let i = arr.length - 1; i > 0; i--){
+      const j = Math.floor(rng() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
   }
   // 저장된 투표를 검증/정리: 이상한 데이터는 걸러내고, 상대는 반드시 이성이어야 함
   function normalizeVotes(votes, size){
@@ -481,6 +510,13 @@
     });
     if (!res.ok) throw new Error('저장 실패');
     return id;
+  }
+  async function deleteRound(roundId){
+    // 투표를 먼저 지우고 회차를 지운다 (중간에 실패해도 회차가 남아있어 다시 시도 가능)
+    const r1 = await fetch(`${FIREBASE_DB_URL}/votes/${roundId}.json`, { method: 'DELETE' });
+    if (!r1.ok) throw new Error('투표 삭제 실패');
+    const r2 = await fetch(`${FIREBASE_DB_URL}/rounds/${roundId}.json`, { method: 'DELETE' });
+    if (!r2.ok) throw new Error('회차 삭제 실패');
   }
   async function findRoundByPassword(pw){
     const rounds = await fetchRounds();
@@ -719,6 +755,8 @@
 
   const aResetCard = document.getElementById('a-reset-card');
   const aResetBtn = document.getElementById('a-reset-btn');
+  const aDeleteRoundBtn = document.getElementById('a-delete-round-btn');
+  const aRandomNonvoters = document.getElementById('a-random-nonvoters');
 
   let allRounds = {};
   let currentRoundId = null;
@@ -750,6 +788,7 @@
     if (entries.length === 0){
       aRoundSelect.innerHTML = '<option value="">회차를 먼저 추가하세요</option>';
       currentRoundId = null;
+      aRoundInfo.textContent = '';
       showRoundDependentCards(false);
       return;
     }
@@ -921,7 +960,7 @@
     downloadCSV(filename, ['번호', '성별', '1순위', '2순위', '제출시각'], rows);
   });
 
-  function runMatching(votes){
+  function runMatching(votes, opts){
     const matched = new Set();
     const matches = [];
     const isMale = id => idGender(id) === '남성';
@@ -969,7 +1008,32 @@
         matched.add(item.male); matched.add(item.female);
       }
     }
-    return matches;
+
+    // 3차: 그래도 짝이 없는 사람은 랜덤으로 이어주기
+    const unmatched = [];
+    if (opts && opts.size){
+      const pool = { M: [], F: [] };
+      for (const g of ['남성', '여성']){
+        for (let i = 1; i <= opts.size; i++){
+          const id = pid(g, i);
+          if (matched.has(id)) continue;
+          if (!opts.includeNonVoters && !votes[id]) continue;   // 투표 안 한 사람은 제외
+          pool[id.charAt(0)].push(id);
+        }
+      }
+      const seed = (opts.seed || '') + '|' + Object.keys(votes).sort()
+        .map(k => `${k}:${votes[k].rank1},${votes[k].rank2}`).join(';') + '|' + (opts.includeNonVoters ? 1 : 0);
+      const rng = makeRng(seed);
+      shuffleWith(pool.M, rng);
+      shuffleWith(pool.F, rng);
+      const n = Math.min(pool.M.length, pool.F.length);
+      for (let i = 0; i < n; i++){
+        matches.push({ male: pool.M[i], female: pool.F[i], type: '랜덤 매칭', score: 0 });
+        matched.add(pool.M[i]); matched.add(pool.F[i]);
+      }
+      unmatched.push(...pool.M.slice(n), ...pool.F.slice(n));
+    }
+    return { matches, unmatched };
   }
 
   aMatchBtn.addEventListener('click', async () => {
@@ -994,9 +1058,14 @@
       aMatchMsg.innerHTML = '<div class="msg error">매칭에 쓸 수 있는 올바른 투표가 없습니다.</div>';
       return;
     }
-    let results;
+    let results, out;
     try {
-      results = runMatching(cleanVotes);
+      out = runMatching(cleanVotes, {
+        size: currentSize,
+        seed: currentRoundId,
+        includeNonVoters: !!aRandomNonvoters.checked,
+      });
+      results = out.matches;
     } catch (e) {
       aMatchMsg.innerHTML = '<div class="msg error">매칭 계산 중 오류가 발생했습니다. 이 회차를 초기화하고 다시 투표받아주세요.</div>';
       return;
@@ -1010,8 +1079,8 @@
       <tr>
         <td>${idNum(m.male)}번</td>
         <td>${idNum(m.female)}번</td>
-        <td><span class="pill ${m.type === '상호 1순위' ? 'mutual' : 'score'}">${m.type}</span></td>
-        <td>${m.score}점</td>
+        <td><span class="pill ${m.type === '상호 1순위' ? 'mutual' : (m.type === '랜덤 매칭' ? 'random' : 'score')}">${m.type}</span></td>
+        <td>${m.type === '랜덤 매칭' ? '-' : m.score + '점'}</td>
       </tr>`).join('');
     aMatchResult.innerHTML = `
       <div class="table-wrap">
@@ -1020,18 +1089,43 @@
           <tbody>${rows}</tbody>
         </table>
       </div>`;
-    aMatchMsg.innerHTML = skipped > 0
-      ? `<div class="msg success">🎯 총 ${results.length}쌍 매칭 완료! (형식이 이상한 투표 ${skipped}건은 제외됨)</div>`
-      : `<div class="msg success">🎯 총 ${results.length}쌍 매칭 완료!</div>`;
+    const chosenCount = results.filter(m => m.type !== '랜덤 매칭').length;
+    const randomCount = results.length - chosenCount;
+    let msg = `🎯 총 ${results.length}쌍 매칭 완료! (직접 선택 ${chosenCount}쌍 + 랜덤 ${randomCount}쌍)`;
+    if (skipped > 0) msg += `<br/>형식이 이상한 투표 ${skipped}건은 제외됨`;
+    let html = `<div class="msg success">${msg}</div>`;
+    if (out.unmatched.length > 0){
+      const names = out.unmatched.slice().sort((a, b) => idOrder(a) - idOrder(b)).map(idLabel).join(', ');
+      html += `<div class="msg warn">짝을 찾지 못한 사람: ${names}<br/>(투표 안 한 사람을 제외했거나 남녀 인원이 달라서 남았어요)</div>`;
+    }
+    aMatchMsg.innerHTML = html;
     aExportMatchBtn.hidden = false;
   });
 
   aExportMatchBtn.addEventListener('click', () => {
     if (lastMatchCache.length === 0) return;
     const r = allRounds[currentRoundId];
-    const rows = lastMatchCache.map(m => [`${idNum(m.male)}번`, `${idNum(m.female)}번`, m.type, m.score]);
+    const rows = lastMatchCache.map(m => [`${idNum(m.male)}번`, `${idNum(m.female)}번`, m.type, m.type === '랜덤 매칭' ? '-' : m.score]);
     const filename = `매칭결과_${r ? r.name : currentRoundId}.csv`;
     downloadCSV(filename, ['남성', '여성', '유형', '점수'], rows);
+  });
+
+  aDeleteRoundBtn.addEventListener('click', async () => {
+    if (!currentRoundId) return;
+    const r = allRounds[currentRoundId];
+    const label = r ? `"${r.name}" (${fmtDate(r.date)})` : '이';
+    if (!confirm(`${label} 회차를 삭제할까요?\n투표 기록도 모두 함께 삭제되고, 되돌릴 수 없습니다.`)) return;
+    aDeleteRoundBtn.disabled = true;
+    try {
+      await deleteRound(currentRoundId);
+      aRoundCreateMsg.innerHTML = `<div class="msg success">🗑 ${label} 회차를 삭제했어요.</div>`;
+      currentRoundId = null;
+      await loadRounds();
+    } catch (e) {
+      aMatchMsg.innerHTML = '<div class="msg error">회차 삭제에 실패했습니다. 다시 시도해주세요.</div>';
+    } finally {
+      aDeleteRoundBtn.disabled = false;
+    }
   });
 
   aResetBtn.addEventListener('click', async () => {
@@ -1050,4 +1144,3 @@
 </script>
 </body>
 </html>
-
