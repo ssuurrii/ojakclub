@@ -90,7 +90,7 @@
   }
 
   label{ display:block; font-size:13px; color:var(--text-dim); margin-bottom:6px; }
-  input[type=password], input[type=text], input[type=date], select{
+  input[type=password], input[type=text], input[type=date], input[type=number], select{
     width:100%;
     padding:12px 14px;
     border-radius:10px;
@@ -171,7 +171,7 @@
 
   .name-list{
     display:grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap:8px;
     margin: 10px 0 4px;
   }
@@ -233,7 +233,7 @@
   <header>
     <div class="logo">💌</div>
     <h1>로테이션 소개팅</h1>
-    <p class="subtitle">닉네임으로 투표하고, 자동으로 매칭 받기</p>
+    <p class="subtitle">번호로 투표하고, 자동으로 매칭 받기</p>
     <div class="rule"></div>
   </header>
 
@@ -255,7 +255,7 @@
     <div class="card" id="p-step-number" hidden>
       <span class="round-chip" id="p-round-chip"></span>
       <div id="p-number-msg"></div>
-      <label for="p-number">본인의 닉네임을 선택하세요</label>
+      <label for="p-number">본인의 번호를 선택하세요</label>
       <select id="p-number">
         <option value="">선택하세요</option>
       </select>
@@ -301,6 +301,9 @@
         <input type="text" id="a-round-name" placeholder="예: 1회차" />
         <label for="a-round-date">행사 날짜</label>
         <input type="date" id="a-round-date" />
+        <label for="a-round-size">성별당 인원수 (9:9 소개팅이면 9)</label>
+        <input type="number" id="a-round-size" value="9" min="2" max="30" inputmode="numeric" />
+        <div class="hint">남성·여성 모두 1번부터 시작해요. 예: 9:9 → 남성 1~9번, 여성 1~9번</div>
         <div class="hint">날짜를 넣으면 참가자 비밀번호(MMDD)가 자동으로 만들어져요. 예: 9월 10일 → 0910</div>
         <div id="a-round-create-msg"></div>
         <button class="primary" id="a-round-create-btn">➕ 회차 추가</button>
@@ -333,7 +336,7 @@
         <div class="section-title">참가자별 투표 상세</div>
         <div class="table-wrap">
           <table id="a-votes-table">
-            <thead><tr><th>닉네임</th><th>성별</th><th>1순위</th><th>2순위</th><th>제출시각</th></tr></thead>
+            <thead><tr><th>번호</th><th>성별</th><th>1순위</th><th>2순위</th><th>제출시각</th></tr></thead>
             <tbody id="a-votes-tbody"></tbody>
           </table>
         </div>
@@ -369,18 +372,49 @@
   // ⚠️ 여기에 본인의 Firebase Realtime Database 주소를 넣으세요.
   const FIREBASE_DB_URL = "https://ojakclub-default-rtdb.firebaseio.com";
 
-  // 닉네임 목록: 남성(1~6번), 여성(7~12번) — 순서를 바꾸면 매칭 로직이 깨지니 순서 유지 필수
-  const MALE_NAMES = ["벤츠", "롤렉스", "오메가", "파텍", "메종", "디올"];
-  const FEMALE_NAMES = ["미우미우", "샤넬", "구찌", "셀린", "펜디", "티파니"];
-
-  function numberToGender(n){ return n <= 6 ? "남성" : "여성"; }
-  function numberToName(n){ return n <= 6 ? MALE_NAMES[n - 1] : FEMALE_NAMES[n - 7]; }
-  function nameToNumber(name){
-    let idx = MALE_NAMES.indexOf(name);
-    if (idx !== -1) return idx + 1;
-    idx = FEMALE_NAMES.indexOf(name);
-    if (idx !== -1) return idx + 7;
-    return null;
+  // 회차마다 성별당 인원수(size)가 다릅니다. 남성·여성 모두 1번부터 시작합니다.
+  // 내부 저장용 ID: 남성 "M1"~"M{size}", 여성 "F1"~"F{size}"
+  const DEFAULT_SIZE = 6;            // 인원수 정보가 없는 예전 회차용 기본값
+  const MIN_SIZE = 2, MAX_SIZE = 30;
+  function roundSize(r){
+    const n = r ? parseInt(r.size, 10) : NaN;
+    return (n >= MIN_SIZE && n <= MAX_SIZE) ? n : DEFAULT_SIZE;
+  }
+  function pid(gender, n){ return (gender === '남성' ? 'M' : 'F') + n; }
+  function idGender(id){ return String(id).charAt(0) === 'M' ? '남성' : '여성'; }
+  function idNum(id){ return parseInt(String(id).slice(1), 10); }
+  function idLabel(id){ return `${idGender(id)} ${idNum(id)}번`; }
+  function idOrder(id){ return (idGender(id) === '남성' ? 0 : 1000) + idNum(id); }
+  function isValidId(id, size){
+    if (typeof id !== 'string' || !/^[MF][0-9]+$/.test(id)) return false;
+    const n = idNum(id);
+    return n >= 1 && n <= size;
+  }
+  // 예전 방식(번호 1~size*2, 여성은 size+1번부터) 데이터를 새 ID로 변환
+  function legacyToId(x, size){
+    if (typeof x === 'string' && /^[MF][0-9]+$/.test(x)) return x;
+    const n = parseInt(x, 10);
+    if (!Number.isInteger(n) || n < 1 || n > size * 2) return null;
+    return n <= size ? 'M' + n : 'F' + (n - size);
+  }
+  function legacyKeyOf(id, size){
+    const n = idNum(id);
+    return String(idGender(id) === '남성' ? n : size + n);
+  }
+  // 저장된 투표를 검증/정리: 이상한 데이터는 걸러내고, 상대는 반드시 이성이어야 함
+  function normalizeVotes(votes, size){
+    const clean = {};
+    let skipped = 0;
+    for (const [k, v] of Object.entries(votes || {})){
+      const voter = legacyToId(k, size);
+      if (!voter || !isValidId(voter, size) || !v || typeof v !== 'object'){ skipped++; continue; }
+      const opp = t => !!t && isValidId(t, size) && idGender(t) !== idGender(voter);
+      const r1 = legacyToId(v.rank1, size);
+      const r2 = legacyToId(v.rank2, size);
+      if (!opp(r1)){ skipped++; continue; }
+      clean[voter] = { rank1: r1, rank2: (opp(r2) && r2 !== r1) ? r2 : null, ts: v.ts };
+    }
+    return { clean, skipped };
   }
 
   const notConfigured = !FIREBASE_DB_URL || FIREBASE_DB_URL === "YOUR_FIREBASE_DATABASE_URL";
@@ -432,14 +466,14 @@
     if (!res.ok) throw new Error('조회 실패');
     return (await res.json()) || {};
   }
-  async function createRound(name, dateStr){
+  async function createRound(name, dateStr, size){
     const rounds = await fetchRounds();
     const password = deriveMMDD(dateStr);
     if (!password) throw new Error('INVALID_DATE');
     const dup = Object.values(rounds).find(r => r.password === password);
     if (dup) throw new Error('DUP');
     const id = 'r' + Date.now();
-    const data = { name, date: dateStr, password, createdAt: Date.now() };
+    const data = { name, date: dateStr, password, size, createdAt: Date.now() };
     const res = await fetch(`${FIREBASE_DB_URL}/rounds/${id}.json`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -479,9 +513,13 @@
     const data = await res.json();
     return data || {};
   }
+  async function hasVoted(roundId, id, size){
+    if (await getVote(roundId, id)) return true;
+    return !!(await getVote(roundId, legacyKeyOf(id, size)));   // 예전 방식으로 저장된 투표도 확인
+  }
   async function listVoteNumbers(roundId){
     const all = await getAllVotes(roundId);
-    return Object.keys(all).map(k => parseInt(k, 10));
+    return Object.keys(all);
   }
   async function deleteVote(roundId, number){
     await fetch(`${FIREBASE_DB_URL}/votes/${roundId}/${number}.json`, { method: 'DELETE' });
@@ -520,15 +558,24 @@
   const pSubmitBtn = document.getElementById('p-submit-btn');
   const pDoneText = document.getElementById('p-done-text');
 
-  let myNumber = null;
+  let myId = null;
   let myRoundId = null;
+  let mySize = DEFAULT_SIZE;
 
-  // 닉네임 옵션 채우기 (1~12)
-  for (let i = 1; i <= 12; i++){
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = `${numberToName(i)} (${numberToGender(i)})`;
-    pNumberSelect.appendChild(opt);
+  // 번호 옵션 채우기: 남성 1~size, 여성 1~size
+  function populateMyNumbers(){
+    pNumberSelect.innerHTML = '<option value="">선택하세요</option>';
+    for (const g of ['남성', '여성']){
+      const grp = document.createElement('optgroup');
+      grp.label = g;
+      for (let i = 1; i <= mySize; i++){
+        const opt = document.createElement('option');
+        opt.value = pid(g, i);
+        opt.textContent = `${g} ${i}번`;
+        grp.appendChild(opt);
+      }
+      pNumberSelect.appendChild(grp);
+    }
   }
 
   pPassBtn.addEventListener('click', async () => {
@@ -539,7 +586,9 @@
       const round = await findRoundByPassword(pw);
       if (round){
         myRoundId = round.id;
-        pRoundChip.textContent = `${round.name} · ${fmtDate(round.date)}`;
+        mySize = roundSize(round);
+        populateMyNumbers();
+        pRoundChip.textContent = `${round.name} · ${fmtDate(round.date)} · ${mySize}:${mySize}`;
         pStepPassword.hidden = true;
         pStepNumber.hidden = false;
       } else {
@@ -559,22 +608,23 @@
     pStepVote.hidden = true;
     if (!val) return;
 
-    myNumber = parseInt(val, 10);
+    if (!isValidId(val, mySize)) return;
+    myId = val;
     let existing;
     try {
-      existing = await getVote(myRoundId, myNumber);
+      existing = await hasVoted(myRoundId, myId, mySize);
     } catch (e) {
       pNumberMsg.innerHTML = '<div class="msg error">서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.</div>';
       return;
     }
     if (existing){
-      pNumberMsg.innerHTML = `<div class="msg warn">⚠️ ${numberToName(myNumber)}님은 이미 투표를 완료하셨습니다. 중복 투표는 불가능합니다.</div>`;
+      pNumberMsg.innerHTML = `<div class="msg warn">⚠️ ${idLabel(myId)}님은 이미 투표를 완료하셨습니다. 중복 투표는 불가능합니다.</div>`;
       return;
     }
 
-    const myGender = numberToGender(myNumber);
+    const myGender = idGender(myId);
     const oppositeGender = myGender === '남성' ? '여성' : '남성';
-    pVoteBadge.textContent = `${numberToName(myNumber)} (${myGender}) · ${oppositeGender} 참가자 중 2명 선택`;
+    pVoteBadge.textContent = `${idLabel(myId)} · ${oppositeGender} 참가자 중 2명 선택`;
 
     [pRank1, pRank2].forEach(sel => {
       sel.innerHTML = '';
@@ -582,12 +632,10 @@
       emptyOpt.value = '';
       emptyOpt.textContent = '선택하세요';
       sel.appendChild(emptyOpt);
-      const start = oppositeGender === '남성' ? 1 : 7;
-      const end = oppositeGender === '남성' ? 6 : 12;
-      for (let i = start; i <= end; i++){
+      for (let i = 1; i <= mySize; i++){
         const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = `${numberToName(i)} (${oppositeGender})`;
+        opt.value = pid(oppositeGender, i);
+        opt.textContent = `${oppositeGender} ${i}번`;
         sel.appendChild(opt);
       }
     });
@@ -610,20 +658,23 @@
     pSubmitBtn.disabled = true;
     pSubmitBtn.textContent = '제출 중...';
     try {
-      const existing = await getVote(myRoundId, myNumber);
+      const existing = await hasVoted(myRoundId, myId, mySize);
       if (existing){
         pVoteMsg.innerHTML = '<div class="msg warn">⚠️ 이미 투표가 접수되어 있습니다.</div>';
         pSubmitBtn.disabled = false;
         pSubmitBtn.textContent = '투표 제출하기';
         return;
       }
-      await setVote(myRoundId, myNumber, {
-        rank1: parseInt(r1, 10),
-        rank2: parseInt(r2, 10),
-        ts: Date.now(),
-      });
+      if (!isValidId(myId, mySize) || !isValidId(r1, mySize) || !isValidId(r2, mySize) ||
+          idGender(r1) === idGender(myId) || idGender(r2) === idGender(myId)){
+        pVoteMsg.innerHTML = '<div class="msg error">선택이 올바르지 않습니다. 처음부터 다시 선택해주세요.</div>';
+        pSubmitBtn.disabled = false;
+        pSubmitBtn.textContent = '투표 제출하기';
+        return;
+      }
+      await setVote(myRoundId, myId, { rank1: r1, rank2: r2, ts: Date.now() });
       pStepVote.hidden = true;
-      pDoneText.textContent = `${numberToName(myNumber)}님의 투표가 성공적으로 제출되었습니다!`;
+      pDoneText.textContent = `${idLabel(myId)}님의 투표가 성공적으로 제출되었습니다!`;
       pStepDone.hidden = false;
     } catch (e) {
       pVoteMsg.innerHTML = '<div class="msg error">제출 중 오류가 발생했습니다. 다시 시도해주세요.</div>';
@@ -641,6 +692,7 @@
 
   const aRoundName = document.getElementById('a-round-name');
   const aRoundDate = document.getElementById('a-round-date');
+  const aRoundSize = document.getElementById('a-round-size');
   const aRoundCreateBtn = document.getElementById('a-round-create-btn');
   const aRoundCreateMsg = document.getElementById('a-round-create-msg');
   const aRoundSelect = document.getElementById('a-round-select');
@@ -670,6 +722,7 @@
 
   let allRounds = {};
   let currentRoundId = null;
+  let currentSize = DEFAULT_SIZE;
   let lastVotesCache = {};
   let lastMatchCache = [];
 
@@ -703,7 +756,7 @@
     for (const [id, r] of entries){
       const opt = document.createElement('option');
       opt.value = id;
-      opt.textContent = `${r.name} · ${fmtDate(r.date)} · 비번 ${r.password}`;
+      opt.textContent = `${r.name} · ${fmtDate(r.date)} · ${roundSize(r)}:${roundSize(r)} · 비번 ${r.password}`;
       aRoundSelect.appendChild(opt);
     }
     currentRoundId = entries[0][0];
@@ -719,11 +772,16 @@
       aRoundCreateMsg.innerHTML = '<div class="msg error">회차 이름과 날짜를 모두 입력해주세요.</div>';
       return;
     }
+    const size = parseInt(aRoundSize.value, 10);
+    if (!Number.isInteger(size) || size < MIN_SIZE || size > MAX_SIZE){
+      aRoundCreateMsg.innerHTML = `<div class="msg error">성별당 인원수는 ${MIN_SIZE}~${MAX_SIZE} 사이 숫자로 입력해주세요.</div>`;
+      return;
+    }
     aRoundCreateBtn.disabled = true;
     try {
-      const id = await createRound(name, dateStr);
+      const id = await createRound(name, dateStr, size);
       const password = deriveMMDD(dateStr);
-      aRoundCreateMsg.innerHTML = `<div class="msg success">✅ "${name}" 회차가 추가됐어요. 참가자 비밀번호: <b>${password}</b></div>`;
+      aRoundCreateMsg.innerHTML = `<div class="msg success">✅ "${name}" (${size}:${size}) 회차가 추가됐어요. 참가자 비밀번호: <b>${password}</b><br/>남성 1~${size}번, 여성 1~${size}번</div>`;
       aRoundName.value = '';
       aRoundDate.value = '';
       await loadRounds();
@@ -762,7 +820,8 @@
       return;
     }
     const r = allRounds[currentRoundId];
-    aRoundInfo.textContent = r ? `${r.name} · ${fmtDate(r.date)} · 참가자 비밀번호 ${r.password}` : '';
+    currentSize = roundSize(r);
+    aRoundInfo.textContent = r ? `${r.name} · ${fmtDate(r.date)} · ${currentSize}:${currentSize} · 참가자 비밀번호 ${r.password}` : '';
     showRoundDependentCards(true);
     aMatchResult.innerHTML = '';
     aMatchMsg.innerHTML = '';
@@ -784,19 +843,22 @@
       return;
     }
     let maleVoted = 0, femaleVoted = 0;
-    for (let i = 1; i <= 12; i++){
-      const gender = numberToGender(i);
-      const voted = !!votes[i];
-      const chip = document.createElement('div');
-      chip.className = `name-chip ${gender === '남성' ? 'male' : 'female'}${voted ? ' voted' : ''}`;
-      chip.textContent = numberToName(i);
-      (gender === '남성' ? aGridMale : aGridFemale).appendChild(chip);
-      if (voted){ gender === '남성' ? maleVoted++ : femaleVoted++; }
+    const size = currentSize;
+    const cleanVotes = normalizeVotes(votes, size).clean;
+    for (const g of ['남성', '여성']){
+      for (let i = 1; i <= size; i++){
+        const voted = !!cleanVotes[pid(g, i)];
+        const chip = document.createElement('div');
+        chip.className = `name-chip ${g === '남성' ? 'male' : 'female'}${voted ? ' voted' : ''}`;
+        chip.textContent = `${i}번`;
+        (g === '남성' ? aGridMale : aGridFemale).appendChild(chip);
+        if (voted){ g === '남성' ? maleVoted++ : femaleVoted++; }
+      }
     }
     const total = maleVoted + femaleVoted;
-    aCount.textContent = `${total}/12`;
-    aMaleCount.textContent = `${maleVoted}/6`;
-    aFemaleCount.textContent = `${femaleVoted}/6`;
+    aCount.textContent = `${total}/${size * 2}`;
+    aMaleCount.textContent = `${maleVoted}/${size}`;
+    aFemaleCount.textContent = `${femaleVoted}/${size}`;
   }
 
   async function refreshVotesTable(){
@@ -810,65 +872,62 @@
       aVotesEmpty.textContent = '서버에 연결할 수 없습니다.';
       return;
     }
-    lastVotesCache = votes;
-    const numbers = Object.keys(votes).map(n => parseInt(n, 10)).sort((a, b) => a - b);
-    if (numbers.length === 0){
+    const { clean, skipped } = normalizeVotes(votes, currentSize);
+    lastVotesCache = clean;
+    const ids = Object.keys(clean).sort((a, b) => idOrder(a) - idOrder(b));
+    if (ids.length === 0){
       aVotesEmpty.hidden = false;
-      aVotesEmpty.textContent = '아직 투표한 사람이 없어요.';
+      aVotesEmpty.textContent = skipped > 0
+        ? `⚠️ 형식이 맞지 않는 투표 ${skipped}건만 있어요. 이 회차를 초기화하고 다시 투표받는 걸 권장해요.`
+        : '아직 투표한 사람이 없어요.';
       return;
     }
     aVotesEmpty.hidden = true;
-    let skippedCount = 0;
-    for (const n of numbers){
-      const v = votes[n];
-      if (!v || typeof v !== 'object' || !v.rank1){
-        skippedCount++;
-        continue; // 예전 버전 잔재 등 이상한 데이터는 건너뜀
-      }
+    for (const id of ids){
+      const v = clean[id];
       const tr = document.createElement('tr');
       const timeStr = v.ts ? new Date(v.ts).toLocaleString('ko-KR') : '';
       tr.innerHTML = `
-        <td>${numberToName(n)}</td>
-        <td>${numberToGender(n)}</td>
-        <td>${v.rank1 ? numberToName(v.rank1) : '-'}</td>
-        <td>${v.rank2 ? numberToName(v.rank2) : '-'}</td>
+        <td>${idNum(id)}번</td>
+        <td>${idGender(id)}</td>
+        <td>${idLabel(v.rank1)}</td>
+        <td>${v.rank2 ? idLabel(v.rank2) : '-'}</td>
         <td>${timeStr}</td>`;
       aVotesTbody.appendChild(tr);
     }
-    if (skippedCount > 0){
+    if (skipped > 0){
       aVotesEmpty.hidden = false;
-      aVotesEmpty.textContent = `⚠️ 형식이 이상한 투표 ${skippedCount}건은 표에서 제외했어요. 필요하면 이 회차를 초기화하고 다시 투표받는 걸 권장해요.`;
+      aVotesEmpty.textContent = `⚠️ 형식이 맞지 않는 투표 ${skipped}건은 표에서 제외했어요. 필요하면 이 회차를 초기화하고 다시 투표받는 걸 권장해요.`;
     }
   }
 
   aRefreshBtn.addEventListener('click', () => { refreshDashboard(); refreshVotesTable(); });
 
   aExportVotesBtn.addEventListener('click', () => {
-    const numbers = Object.keys(lastVotesCache).map(n => parseInt(n, 10)).sort((a, b) => a - b);
-    if (numbers.length === 0) return;
+    const ids = Object.keys(lastVotesCache).sort((a, b) => idOrder(a) - idOrder(b));
+    if (ids.length === 0) return;
     const r = allRounds[currentRoundId];
-    const rows = numbers.map(n => {
-      const v = lastVotesCache[n];
+    const rows = ids.map(id => {
+      const v = lastVotesCache[id];
       return [
-        numberToName(n),
-        numberToGender(n),
-        v.rank1 ? numberToName(v.rank1) : '',
-        v.rank2 ? numberToName(v.rank2) : '',
+        `${idNum(id)}번`,
+        idGender(id),
+        idLabel(v.rank1),
+        v.rank2 ? idLabel(v.rank2) : '',
         v.ts ? new Date(v.ts).toLocaleString('ko-KR') : '',
       ];
     });
     const filename = `투표내역_${r ? r.name : currentRoundId}.csv`;
-    downloadCSV(filename, ['닉네임', '성별', '1순위', '2순위', '제출시각'], rows);
+    downloadCSV(filename, ['번호', '성별', '1순위', '2순위', '제출시각'], rows);
   });
 
   function runMatching(votes){
     const matched = new Set();
     const matches = [];
+    const isMale = id => idGender(id) === '남성';
 
-    function isMale(n){ return n <= 6; }
-
-    for (const voterStr of Object.keys(votes)){
-      const voter = parseInt(voterStr, 10);
+    // 1차: 서로 1순위로 지목한 커플 우선 확정
+    for (const voter of Object.keys(votes)){
       if (matched.has(voter)) continue;
       const v = votes[voter];
       const target = v.rank1;
@@ -881,31 +940,29 @@
       }
     }
 
+    // 2차: 남은 인원끼리 점수 높은 순 (동점이면 먼저 제출한 쪽)
     const scoreMap = { 1: 3, 2: 2 };
     const scoreMatrix = [];
-    for (const voterStr of Object.keys(votes)){
-      const voter = parseInt(voterStr, 10);
+    for (const voter of Object.keys(votes)){
       if (matched.has(voter)) continue;
       const v = votes[voter];
-      const targets = [v.rank1, v.rank2];
-      targets.forEach((target, idx) => {
+      [v.rank1, v.rank2].forEach((target, idx) => {
         if (!target || matched.has(target)) return;
         const myScore = scoreMap[idx + 1] || 0;
         let otherScore = 0;
         const tv = votes[target];
         if (tv){
-          const otherTargets = [tv.rank1, tv.rank2];
-          const otherRank = otherTargets.indexOf(voter);
+          const otherRank = [tv.rank1, tv.rank2].indexOf(voter);
           if (otherRank !== -1) otherScore = scoreMap[otherRank + 1] || 0;
         }
-        const totalScore = myScore + otherScore;
         const male = isMale(voter) ? voter : target;
         const female = isMale(voter) ? target : voter;
         const earlierTime = Math.min(v.ts || Infinity, tv ? (tv.ts || Infinity) : Infinity);
-        scoreMatrix.push({ male, female, score: totalScore, time: earlierTime });
+        scoreMatrix.push({ male, female, score: myScore + otherScore, time: earlierTime });
       });
     }
-    scoreMatrix.sort((a, b) => b.score - a.score || a.time - b.time);
+    scoreMatrix.sort((a, b) => b.score - a.score || a.time - b.time
+      || idOrder(a.male) - idOrder(b.male) || idOrder(a.female) - idOrder(b.female));
     for (const item of scoreMatrix){
       if (!matched.has(item.male) && !matched.has(item.female)){
         matches.push({ male: item.male, female: item.female, type: '점수 매칭', score: item.score });
@@ -932,14 +989,10 @@
       return;
     }
     // 형식이 이상한(예전 버전 잔재 등) 투표는 매칭 전에 걸러낸다
-    const cleanVotes = {};
-    let skipped = 0;
-    for (const [k, v] of Object.entries(votes)){
-      if (v && typeof v === 'object' && v.rank1){
-        cleanVotes[k] = v;
-      } else {
-        skipped++;
-      }
+    const { clean: cleanVotes, skipped } = normalizeVotes(votes, currentSize);
+    if (Object.keys(cleanVotes).length === 0){
+      aMatchMsg.innerHTML = '<div class="msg error">매칭에 쓸 수 있는 올바른 투표가 없습니다.</div>';
+      return;
     }
     let results;
     try {
@@ -955,8 +1008,8 @@
     }
     let rows = results.map(m => `
       <tr>
-        <td>${numberToName(m.male)}</td>
-        <td>${numberToName(m.female)}</td>
+        <td>${idNum(m.male)}번</td>
+        <td>${idNum(m.female)}번</td>
         <td><span class="pill ${m.type === '상호 1순위' ? 'mutual' : 'score'}">${m.type}</span></td>
         <td>${m.score}점</td>
       </tr>`).join('');
@@ -976,7 +1029,7 @@
   aExportMatchBtn.addEventListener('click', () => {
     if (lastMatchCache.length === 0) return;
     const r = allRounds[currentRoundId];
-    const rows = lastMatchCache.map(m => [numberToName(m.male), numberToName(m.female), m.type, m.score]);
+    const rows = lastMatchCache.map(m => [`${idNum(m.male)}번`, `${idNum(m.female)}번`, m.type, m.score]);
     const filename = `매칭결과_${r ? r.name : currentRoundId}.csv`;
     downloadCSV(filename, ['남성', '여성', '유형', '점수'], rows);
   });
